@@ -45,8 +45,77 @@
     currentSource = btn.dataset.src;
     $$('#source-seg button').forEach(b => b.classList.toggle('active', b === btn));
     $('#src-files').hidden = currentSource !== 'files';
+    $('#src-drive').hidden = currentSource !== 'drive';
     $('#src-urls').hidden = currentSource !== 'urls';
   });
+
+  /* ---------- Google Drive ---------- */
+  const DRIVE_KEY_STORE = 'lamMienDriveKey';
+  // nạp key đã lưu
+  try {
+    const savedKey = localStorage.getItem(DRIVE_KEY_STORE);
+    if (savedKey) $('#drive-key').value = savedKey;
+  } catch (_) {}
+  $('#drive-key').addEventListener('change', e => {
+    const k = e.target.value.trim();
+    try { k ? localStorage.setItem(DRIVE_KEY_STORE, k) : localStorage.removeItem(DRIVE_KEY_STORE); } catch (_) {}
+  });
+
+  function extractFolderId(text) {
+    if (!text) return '';
+    const m = String(text).match(/\/folders\/([a-zA-Z0-9_-]+)/) ||
+              String(text).match(/[?&]id=([a-zA-Z0-9_-]+)/);
+    if (m) return m[1];
+    const trimmed = String(text).trim();
+    return /^[a-zA-Z0-9_-]{20,}$/.test(trimmed) ? trimmed : '';
+  }
+  function driveFileId(url) {
+    const m = String(url).match(/\/file\/d\/([a-zA-Z0-9_-]+)/) ||
+              String(url).match(/[?&]id=([a-zA-Z0-9_-]+)/) ||
+              String(url).match(/\/d\/([a-zA-Z0-9_-]+)/);
+    return m ? m[1] : '';
+  }
+  const driveThumb = (id, sz) => `https://drive.google.com/thumbnail?id=${id}&sz=${sz || 'w1000'}`;
+
+  async function listDriveFolder(folderId, apiKey) {
+    let files = [], pageToken = '';
+    do {
+      const url = new URL('https://www.googleapis.com/drive/v3/files');
+      url.searchParams.set('q', `'${folderId}' in parents and mimeType contains 'image/' and trashed=false`);
+      url.searchParams.set('key', apiKey);
+      url.searchParams.set('fields', 'nextPageToken, files(id,name,mimeType)');
+      url.searchParams.set('pageSize', '1000');
+      url.searchParams.set('orderBy', 'name_natural');
+      url.searchParams.set('supportsAllDrives', 'true');
+      url.searchParams.set('includeItemsFromAllDrives', 'true');
+      if (pageToken) url.searchParams.set('pageToken', pageToken);
+      const res = await fetch(url);
+      if (!res.ok) {
+        let msg = 'HTTP ' + res.status;
+        try { const e = await res.json(); msg = e.error?.message || msg; } catch (_) {}
+        throw new Error(msg);
+      }
+      const data = await res.json();
+      files.push(...(data.files || []));
+      pageToken = data.nextPageToken || '';
+    } while (pageToken);
+    return files;
+  }
+
+  async function buildDrivePhotos(folderText, apiKey) {
+    const folderId = extractFolderId(folderText);
+    if (!folderId) throw new Error('Không nhận ra ID thư mục Drive. Hãy dán đúng link dạng .../folders/...');
+    if (!apiKey) throw new Error('Chưa nhập Google Drive API Key.');
+    const files = await listDriveFolder(folderId, apiKey);
+    if (!files.length) throw new Error('Thư mục trống hoặc chưa chia sẻ “Bất kỳ ai có đường liên kết”.');
+    return files.map((f, i) => ({
+      id: 'd' + i + '_' + Date.now(),
+      name: f.name,
+      src: driveThumb(f.id, 'w1000'),
+      full: driveThumb(f.id, 'w1920'),
+      selected: false, note: ''
+    }));
+  }
 
   /* ---------- File input ---------- */
   let pickedFiles = [];
@@ -81,27 +150,55 @@
 
   $('#create-form').addEventListener('submit', async e => {
     e.preventDefault();
+    const submitBtn = $('#create-form button[type="submit"]');
     let photos = [];
 
-    if (currentSource === 'files') {
-      if (!pickedFiles.length) { toast('Hãy chọn ít nhất 1 ảnh từ máy'); return; }
-      toast('Đang nạp ảnh…');
-      photos = await Promise.all(pickedFiles.map(async (f, i) => ({
-        id: 'p' + i + '_' + Date.now(),
-        name: f.name,
-        src: await readFileAsDataURL(f),
-        selected: false, note: ''
-      })));
-    } else if (currentSource === 'urls') {
-      const lines = $('#url-list').value.split('\n').map(s => s.trim()).filter(Boolean);
-      if (!lines.length) { toast('Hãy dán ít nhất 1 link ảnh'); return; }
-      photos = lines.map((url, i) => ({
-        id: 'p' + i + '_' + Date.now(),
-        name: url.split('/').pop().split('?')[0] || `anh_${i + 1}.jpg`,
-        src: url, selected: false, note: ''
-      }));
-    } else {
-      photos = DEMO.map((d, i) => ({ id: 'p' + i + '_' + Date.now(), name: d.name, src: d.src, selected: false, note: '' }));
+    try {
+      if (currentSource === 'files') {
+        if (!pickedFiles.length) { toast('Hãy chọn ít nhất 1 ảnh từ máy'); return; }
+        toast('Đang nạp ảnh…');
+        photos = await Promise.all(pickedFiles.map(async (f, i) => ({
+          id: 'p' + i + '_' + Date.now(),
+          name: f.name,
+          src: await readFileAsDataURL(f),
+          selected: false, note: ''
+        })));
+
+      } else if (currentSource === 'drive') {
+        const folderText = $('#drive-url').value.trim();
+        const apiKey = $('#drive-key').value.trim();
+        if (!folderText) { toast('Hãy dán link thư mục Google Drive'); return; }
+        submitBtn.disabled = true; submitBtn.textContent = 'Đang tải ảnh…';
+        toast('Đang tải ảnh từ Google Drive…');
+        photos = await buildDrivePhotos(folderText, apiKey);
+
+      } else if (currentSource === 'urls') {
+        const lines = $('#url-list').value.split('\n').map(s => s.trim()).filter(Boolean);
+        if (!lines.length) { toast('Hãy dán ít nhất 1 link ảnh'); return; }
+        // Nếu là link thư mục Drive -> chuyển sang tab Google Drive
+        const folderLine = lines.find(l => extractFolderId(l) && /drive\.google\.com\/.*folders/.test(l));
+        if (folderLine) {
+          $('#drive-url').value = folderLine;
+          document.querySelector('#source-seg button[data-src="drive"]').click();
+          toast('Đây là link thư mục Drive — đã chuyển sang tab Google Drive, nhập API key giúp nhé');
+          return;
+        }
+        photos = lines.map((url, i) => {
+          const fid = driveFileId(url);
+          if (fid && /drive\.google\.com/.test(url)) {
+            return { id: 'p' + i + '_' + Date.now(), name: `drive_${i + 1}.jpg`, src: driveThumb(fid, 'w1000'), full: driveThumb(fid, 'w1920'), selected: false, note: '' };
+          }
+          return { id: 'p' + i + '_' + Date.now(), name: url.split('/').pop().split('?')[0] || `anh_${i + 1}.jpg`, src: url, selected: false, note: '' };
+        });
+
+      } else {
+        photos = DEMO.map((d, i) => ({ id: 'p' + i + '_' + Date.now(), name: d.name, src: d.src, selected: false, note: '' }));
+      }
+    } catch (err) {
+      toast('Lỗi: ' + (err.message || err));
+      return;
+    } finally {
+      submitBtn.disabled = false; submitBtn.textContent = 'Tạo trang chọn';
     }
 
     const max = parseInt($('#max-count').value, 10);
@@ -228,7 +325,7 @@
     lbIndex = i;
     const p = album.photos[i];
     if (!p) return;
-    $('#lb-img').src = p.src;
+    $('#lb-img').src = p.full || p.src;
     $('#lb-img').alt = p.name;
     $('#lb-name').textContent = p.name;
     $('#lb-note-wrap').hidden = !album.allowNotes;

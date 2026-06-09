@@ -84,6 +84,7 @@
               <label>Cách thêm ảnh</label>
               <div class="seg" id="source-seg">
                 <button type="button" data-src="files" class="active">Tải từ máy</button>
+                <button type="button" data-src="drive">Google Drive</button>
                 <button type="button" data-src="urls">Dán link ảnh</button>
                 <button type="button" data-src="demo">Ảnh mẫu</button>
               </div>
@@ -96,6 +97,19 @@
                 <input id="file-input" type="file" accept="image/*" multiple>
               </label>
               <small class="muted" id="files-hint">Chưa chọn ảnh nào. Có thể chọn nhiều file một lúc.</small>
+            </div>
+
+            <div id="src-drive" hidden>
+              <div class="field grow">
+                <label for="drive-url">Link thư mục Google Drive</label>
+                <textarea id="drive-url" rows="3" placeholder="https://drive.google.com/drive/folders/..."></textarea>
+                <small class="muted">Thư mục phải được chia sẻ ở chế độ <strong>“Bất kỳ ai có đường liên kết”</strong>. Khi bấm “Tạo trang chọn”, hệ thống sẽ tự tải toàn bộ ảnh trong thư mục.</small>
+              </div>
+              <div class="field">
+                <label for="drive-key">Google Drive API Key <span class="opt">(nhập 1 lần, tự lưu)</span></label>
+                <input id="drive-key" type="password" placeholder="AIza..." autocomplete="off">
+                <small class="muted">Tạo tại <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">Google Cloud Console → Credentials → API Key</a>, rồi bật <strong>Google Drive API</strong> cho project. Key được lưu trên trình duyệt này, không gửi đi đâu khác.</small>
+              </div>
             </div>
 
             <div id="src-urls" hidden>
