@@ -56,10 +56,10 @@
     const savedKey = localStorage.getItem(DRIVE_KEY_STORE);
     if (savedKey) $('#drive-key').value = savedKey;
   } catch (_) {}
-  $('#drive-key').addEventListener('change', e => {
-    const k = e.target.value.trim();
+  function saveDriveKey(k) {
     try { k ? localStorage.setItem(DRIVE_KEY_STORE, k) : localStorage.removeItem(DRIVE_KEY_STORE); } catch (_) {}
-  });
+  }
+  $('#drive-key').addEventListener('input', e => saveDriveKey(e.target.value.trim()));
 
   function extractFolderId(text) {
     if (!text) return '';
@@ -168,6 +168,7 @@
         const folderText = $('#drive-url').value.trim();
         const apiKey = $('#drive-key').value.trim();
         if (!folderText) { toast('Hãy dán link thư mục Google Drive'); return; }
+        saveDriveKey(apiKey);
         submitBtn.disabled = true; submitBtn.textContent = 'Đang tải ảnh…';
         toast('Đang tải ảnh từ Google Drive…');
         photos = await buildDrivePhotos(folderText, apiKey);
