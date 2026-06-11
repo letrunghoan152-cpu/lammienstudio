@@ -87,6 +87,8 @@
     $$('.page').forEach(p => p.classList.toggle('active', p.id === 'page-' + page));
     $('#sidebar').classList.remove('open');
     window.scrollTo({ top: 0 });
+    if (page === 'albums') renderAlbums();
+    if (page === 'progress') renderProgress();
   }));
   $('#sb-toggle').addEventListener('click', () => $('#sidebar').classList.toggle('open'));
 
@@ -202,6 +204,8 @@
       maxCount: Number.isFinite(max) && max > 0 ? max : 0,
       allowNotes: $('#allow-notes').checked,
       allowDownload: $('#allow-download').checked,
+      shootDate: $('#shoot-date').value || '',
+      deadline: $('#deadline-date').value || '',
       sourceUrl,
       createdAt: Date.now(), lastActivity: Date.now(),
       photos
@@ -492,18 +496,70 @@
     toast('Đã tải danh sách .txt');
   });
 
-  /* ---------- Settings (NAS / brand) ---------- */
-  $('#nas-save').addEventListener('click', () => { setDriveKey($('#nas-key').value.trim()); toast('Đã lưu API Key'); });
-  $('#brand-save').addEventListener('click', () => {
-    brand.name = $('#brand-name').value.trim() || 'Lam Miên Studio';
-    brand.welcome = $('#brand-welcome').value.trim() || 'Chọn những khoảnh khắc bạn yêu thích';
-    saveBrand(); toast('Đã lưu thương hiệu');
-  });
+  /* ---------- Tiến độ hậu kỳ ---------- */
+  function daysLeft(deadline) {
+    if (!deadline) return null;
+    const d = new Date(deadline + 'T00:00:00'); if (isNaN(d)) return null;
+    const now = new Date(); now.setHours(0, 0, 0, 0);
+    return Math.round((d - now) / 86400000);
+  }
+  function deadlineBadge(al) {
+    if (al.status === 'delivered') return { cls: 'dl-ok', txt: 'Đã bàn giao' };
+    const dl = daysLeft(al.deadline);
+    if (dl === null) return { cls: 'dl-none', txt: 'Chưa đặt hạn' };
+    if (dl < 0) return { cls: 'dl-over', txt: `Trễ ${-dl} ngày 🔥` };
+    if (dl === 0) return { cls: 'dl-soon', txt: 'Hết hạn hôm nay' };
+    if (dl <= 3) return { cls: 'dl-soon', txt: `Còn ${dl} ngày` };
+    return { cls: 'dl-ok', txt: `Còn ${dl} ngày` };
+  }
+  function isOverdue(al) { const d = daysLeft(al.deadline); return al.status !== 'delivered' && d !== null && d < 0; }
+  function isSoon(al) { const d = daysLeft(al.deadline); return al.status !== 'delivered' && d !== null && d >= 0 && d <= 3; }
+
+  function renderProgress() {
+    const list = $('#progress-list'), empty = $('#progress-empty'), banner = $('#deadline-banner');
+    list.innerHTML = '';
+    if (!albums.length) { empty.hidden = false; list.hidden = true; banner.innerHTML = ''; return; }
+    empty.hidden = true; list.hidden = false;
+
+    const over = albums.filter(isOverdue).length;
+    const soon = albums.filter(isSoon).length;
+    if (over) {
+      banner.innerHTML = `<div class="banner alert"><svg viewBox="0 0 24 24"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg><span><strong>${over}</strong> album đang cháy deadline${soon ? `, <strong>${soon}</strong> album sắp đến hạn` : ''} — cần xử lý gấp!</span></div>`;
+    } else if (soon) {
+      banner.innerHTML = `<div class="banner alert"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l2.5 2"/></svg><span><strong>${soon}</strong> album sắp đến hạn trả ảnh (trong 3 ngày).</span></div>`;
+    } else {
+      banner.innerHTML = `<div class="banner ok"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg><span>Không có album nào trễ hạn. Tiến độ ổn định 👍</span></div>`;
+    }
+
+    const sorted = albums.slice().sort((a, b) => {
+      const da = daysLeft(a.deadline), db = daysLeft(b.deadline);
+      const ga = a.status === 'delivered' ? 3 : da === null ? 2 : 0;
+      const gb = b.status === 'delivered' ? 3 : db === null ? 2 : 0;
+      if (ga !== gb) return ga - gb;
+      if (ga === 0) return da - db;
+      return (b.lastActivity || 0) - (a.lastActivity || 0);
+    });
+    sorted.forEach(al => list.appendChild(buildProgRow(al)));
+  }
+
+  function buildProgRow(al) {
+    const bd = deadlineBadge(al);
+    const row = document.createElement('div');
+    row.className = 'prog-row';
+    row.innerHTML = `
+      <div class="who"><strong>${escapeHtml(al.name)}</strong><small>${al.client ? escapeHtml(al.client) : 'Chưa có tên khách'}</small></div>
+      <input type="date" data-f="shoot" value="${escapeAttr(al.shootDate || '')}">
+      <input type="date" data-f="deadline" value="${escapeAttr(al.deadline || '')}">
+      <select data-f="status">${STATUSES.map(s => `<option value="${s.key}"${s.key === al.status ? ' selected' : ''}>${s.label}</option>`).join('')}</select>
+      <span class="deadline-badge ${bd.cls}"><span class="dot"></span>${bd.txt}</span>`;
+    row.querySelector('[data-f="shoot"]').addEventListener('change', e => { al.shootDate = e.target.value; al.lastActivity = Date.now(); saveAlbums(); });
+    row.querySelector('[data-f="deadline"]').addEventListener('change', e => { al.deadline = e.target.value; al.lastActivity = Date.now(); saveAlbums(); renderProgress(); });
+    row.querySelector('[data-f="status"]').addEventListener('change', e => { al.status = e.target.value; al.lastActivity = Date.now(); saveAlbums(); renderProgress(); });
+    return row;
+  }
 
   /* ---------- Init ---------- */
   loadAlbums(); loadBrand();
-  $('#nas-key').value = getDriveKey();
-  $('#brand-name').value = brand.name; $('#brand-welcome').value = brand.welcome;
 
   const shared = decodeSharedAlbum();
   if (shared) {

@@ -243,6 +243,36 @@ select {
 .placeholder .ico svg { width: 28px; height: 28px; fill: none; stroke: currentColor; stroke-width: 1.7; }
 .placeholder strong { font-size: 18px; color: var(--text); }
 
+/* ============ Tiến độ hậu kỳ ============ */
+.banner { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-radius: 14px; margin-bottom: 18px; font-weight: 600; font-size: 14px; }
+.banner svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; flex: none; }
+.banner.alert { background: rgba(244,63,94,.12); border: 1px solid rgba(244,63,94,.3); color: #fda4af; }
+.banner.ok { background: var(--green-soft); border: 1px solid rgba(52,211,153,.25); color: #86efac; }
+
+.prog-head, .prog-row { display: grid; grid-template-columns: 2.2fr 1.2fr 1.2fr 1.5fr 1.3fr; gap: 14px; align-items: center; }
+.prog-head { padding: 0 14px 12px; font-size: 12px; color: var(--muted-2); font-weight: 700; border-bottom: 1px solid var(--line); }
+.prog-row { padding: 14px; border-bottom: 1px solid var(--line-soft); border-radius: 12px; transition: background .15s; }
+.prog-row:last-child { border-bottom: 0; }
+.prog-row:hover { background: var(--panel-2); }
+.prog-row .who strong { display: block; font-size: 14.5px; }
+.prog-row .who small { color: var(--muted); font-size: 12.5px; }
+.prog-row input[type="date"] { height: 38px; padding: 0 10px; font-size: 13px; }
+.prog-row select { height: 38px; padding: 0 30px 0 12px; font-size: 13px; }
+
+.deadline-badge { display: inline-flex; align-items: center; gap: 7px; padding: 7px 12px; border-radius: 99px; font-size: 12.5px; font-weight: 700; white-space: nowrap; }
+.deadline-badge .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.dl-over { color: #fb7185; background: rgba(244,63,94,.14); animation: pulseRed 1.6s ease-in-out infinite; }
+.dl-soon { color: var(--amber); background: var(--amber-soft); }
+.dl-ok { color: var(--green); background: var(--green-soft); }
+.dl-none { color: var(--muted); background: var(--panel-3); }
+@keyframes pulseRed { 0%,100% { box-shadow: 0 0 0 0 rgba(244,63,94,.0); } 50% { box-shadow: 0 0 0 5px rgba(244,63,94,.16); } }
+
+@media (max-width: 760px) {
+  .prog-head { display: none; }
+  .prog-row { grid-template-columns: 1fr 1fr; gap: 10px; padding: 14px; background: var(--panel-2); margin-bottom: 10px; border: 1px solid var(--line); }
+  .prog-row .who { grid-column: 1 / -1; }
+}
+
 /* ============ Modal ============ */
 .modal { position: fixed; inset: 0; z-index: 60; display: none; place-items: center; padding: 24px; background: rgba(0,0,0,.6); backdrop-filter: blur(5px); }
 .modal.open { display: grid; }
