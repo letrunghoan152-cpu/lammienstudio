@@ -3,275 +3,268 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Lam Miên Studio — Chọn & lọc ảnh</title>
-  <meta name="theme-color" content="#0066ab" />
+  <title>Lam Miên Studio — Quản lý album chọn ảnh</title>
+  <meta name="theme-color" content="#0a0b0e" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='12' cy='12' r='11' fill='%2312c3f4'/><path d='M12 18s-5-3-5-6.3C7 9.6 8.4 8 10.2 8c1 0 1.8.5 2.3 1.3C13 8.5 13.8 8 14.8 8 16.6 8 18 9.6 18 11.7 18 15 12 18 12 18z' fill='white'/></svg>">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect width='24' height='24' rx='6' fill='%237c5cfc'/><path d='M12 18s-5-3-5-6.3C7 9.6 8.4 8 10.2 8c1 0 1.8.5 2.3 1.3C13 8.5 13.8 8 14.8 8 16.6 8 18 9.6 18 11.7 18 15 12 18 12 18z' fill='white'/></svg>">
 </head>
 <body>
-  <header class="topbar">
-    <a class="brand" href="#" data-nav="create" aria-label="Lam Miên Studio">
-      <svg class="brand-logo" viewBox="0 0 52 52" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stop-color="#12c3f4"/><stop offset=".55" stop-color="#39a4dc"/><stop offset="1" stop-color="#0066ab"/>
-          </linearGradient>
-        </defs>
-        <rect x="2" y="2" width="48" height="48" rx="14" fill="url(#lg)"/>
-        <path d="M26 39s-11-6.5-11-14C15 20 18 16.5 22 16.5c1.9 0 3.6 1 4 2.6.4-1.6 2.1-2.6 4-2.6 4 0 7 3.5 7 8.5 0 7.5-11 14-11 14z" fill="#fff" opacity=".95"/>
-        <circle cx="34.5" cy="18.5" r="2.4" fill="#ff4f7a"/>
-      </svg>
-      <span class="brand-text">
-        <strong>Lam Miên Studio</strong>
-        <small>Chọn &amp; lọc ảnh</small>
-      </span>
-    </a>
-    <nav class="main-nav" aria-label="Điều hướng">
-      <a data-nav="create" class="active">Tạo album</a>
-      <a data-nav="gallery">Chọn ảnh</a>
-      <a data-nav="guide">Hướng dẫn</a>
-    </nav>
-    <div class="auth-area">
-      <a class="button ghost" data-nav="gallery">
-        <svg class="login-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></svg>
-        <span>Xem album</span>
-      </a>
-    </div>
-  </header>
 
-  <main>
-    <!-- ============== CREATE ============== -->
-    <section class="view active" id="create-view">
-      <div class="hero">
-        <div class="hero-copy">
-          <p class="hero-kicker">Dành cho khách của Lam Miên Studio</p>
-          <h1>Chọn ảnh đẹp của bạn <span class="grad">chỉ trong vài phút</span>.</h1>
-          <p class="lead">Tải ảnh từ máy hoặc dán danh sách link ảnh, đặt số ảnh tối đa được chọn, rồi mở trang chọn ảnh cho khách. Khách bấm trái tim để chọn, ghi chú yêu cầu, và gửi lại danh sách cho studio.</p>
-          <div class="quick-flow" aria-label="Quy trình">
-            <span>Tải ảnh</span>
-            <span>Mở trang chọn</span>
-            <span>Khách chọn</span>
-            <span>Nhận danh sách</span>
-          </div>
-          <div class="hero-actions">
-            <a class="button primary" id="cta-start">Bắt đầu tạo album</a>
-            <a class="button ghost" data-nav="guide">Xem hướng dẫn</a>
-          </div>
+  <!-- ============== LOGIN ============== -->
+  <div class="screen" id="login-view">
+    <div class="login-card">
+      <div class="login-brand">
+        <svg class="logo" viewBox="0 0 52 52"><rect width="52" height="52" rx="14" fill="#7c5cfc"/><path d="M26 39s-11-6.5-11-14C15 20 18 16.5 22 16.5c1.9 0 3.6 1 4 2.6.4-1.6 2.1-2.6 4-2.6 4 0 7 3.5 7 8.5 0 7.5-11 14-11 14z" fill="#fff"/><circle cx="34.5" cy="18.5" r="2.4" fill="#fb6f92"/></svg>
+        <div><strong>Lam Miên Studio</strong><small>Hệ thống chọn ảnh</small></div>
+      </div>
+      <h1>Đăng nhập</h1>
+      <p class="sub">Đăng nhập để quản lý album và gửi link chọn ảnh cho khách.</p>
+      <form id="login-form" autocomplete="off">
+        <div class="field">
+          <label for="lg-user">Tài khoản</label>
+          <input id="lg-user" placeholder="Tên đăng nhập" autocomplete="username">
         </div>
-        <div class="hero-media" aria-hidden="true">
-          <div class="photo-strip"><span></span><span></span><span></span><span></span></div>
-          <div class="floating-panel">
-            <strong id="hero-count">1.248</strong>
-            <span>ảnh đã chọn</span>
-          </div>
-          <div class="floating-heart">
-            <svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-9.6-9.4C.7 7.7 3.4 4 7.1 4c2 0 3.6 1 4.9 2.7C13.3 5 14.9 4 16.9 4c3.7 0 6.4 3.7 4.7 7.6C19.5 16.4 12 21 12 21z"/></svg>
-          </div>
+        <div class="field">
+          <label for="lg-pass">Mật khẩu</label>
+          <input id="lg-pass" type="password" placeholder="••••••••" autocomplete="current-password">
+        </div>
+        <button class="btn primary block" type="submit">Đăng nhập</button>
+      </form>
+      <p class="login-note">Tài khoản demo: <strong>lammien</strong> / <strong>lammien</strong></p>
+    </div>
+  </div>
+
+  <!-- ============== APP SHELL ============== -->
+  <div class="app-shell" id="app" hidden>
+    <div class="mobile-bar">
+      <button class="icon-btn" id="sb-toggle" aria-label="Menu"><svg viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
+      <strong>Lam Miên Studio</strong>
+    </div>
+
+    <aside class="sidebar" id="sidebar">
+      <div class="sb-brand">
+        <svg class="logo" viewBox="0 0 52 52"><rect width="52" height="52" rx="14" fill="#7c5cfc"/><path d="M26 39s-11-6.5-11-14C15 20 18 16.5 22 16.5c1.9 0 3.6 1 4 2.6.4-1.6 2.1-2.6 4-2.6 4 0 7 3.5 7 8.5 0 7.5-11 14-11 14z" fill="#fff"/><circle cx="34.5" cy="18.5" r="2.4" fill="#fb6f92"/></svg>
+        <div><strong>Lam Miên Studio</strong><small>Chọn ảnh</small></div>
+      </div>
+      <nav class="sb-nav">
+        <a data-page="albums" class="active"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>Albums</a>
+        <a data-page="tools"><svg viewBox="0 0 24 24"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 0 0 5.4-5.4l-2.3 2.3-2-2 2.3-2.3z"/></svg>Tiện ích</a>
+        <a data-page="nas"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="6" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/><path d="M7 7h.01M7 17h.01"/></svg>Tài khoản NAS</a>
+        <a data-page="brand"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18M3 12h18"/></svg>Cài đặt thương hiệu</a>
+        <a data-page="plan"><svg viewBox="0 0 24 24"><path d="m12 2 2.4 7.4H22l-6 4.4 2.3 7.2-6.3-4.6L5.7 21 8 13.8 2 9.4h7.6z"/></svg>Gói dịch vụ</a>
+      </nav>
+      <div class="sb-foot">
+        <div class="sb-user">
+          <span class="av" id="sb-av">L</span>
+          <span class="meta"><strong id="sb-name">Lam Miên</strong><small>Nhân sự studio</small></span>
+          <button class="icon-btn" id="logout-btn" aria-label="Đăng xuất" title="Đăng xuất"><svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5M21 12H9"/></svg></button>
         </div>
       </div>
+    </aside>
 
-      <section class="workspace" id="builder">
-        <div class="panel">
-          <div class="section-head row">
-            <p class="eyebrow">Bước 1</p>
-            <h3>Nguồn ảnh</h3>
+    <main class="app-main">
+      <!-- ===== ALBUMS ===== -->
+      <section class="page active" id="page-albums">
+        <div class="page-head">
+          <div>
+            <h1>Albums gửi khách chọn ảnh <span class="badge-private"><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>Riêng tư</span></h1>
+            <p class="sub">Không gian làm việc riêng với khách hàng — tạo album, chia sẻ link và nhận danh sách ảnh khách chọn.</p>
           </div>
-          <form class="form-simple" id="create-form" autocomplete="off">
-            <div class="field">
-              <label>Cách thêm ảnh</label>
-              <div class="seg" id="source-seg">
-                <button type="button" data-src="files" class="active">Tải từ máy</button>
-                <button type="button" data-src="drive">Google Drive</button>
-                <button type="button" data-src="urls">Dán link ảnh</button>
-                <button type="button" data-src="demo">Ảnh mẫu</button>
-              </div>
-            </div>
-
-            <div id="src-files">
-              <label class="file-button">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></svg>
-                Chọn nhiều ảnh từ máy
-                <input id="file-input" type="file" accept="image/*" multiple>
-              </label>
-              <small class="muted" id="files-hint">Chưa chọn ảnh nào. Có thể chọn nhiều file một lúc.</small>
-            </div>
-
-            <div id="src-drive" hidden>
-              <div class="field grow">
-                <label for="drive-url">Link thư mục Google Drive</label>
-                <textarea id="drive-url" rows="3" placeholder="https://drive.google.com/drive/folders/..."></textarea>
-                <small class="muted">Thư mục phải được chia sẻ ở chế độ <strong>“Bất kỳ ai có đường liên kết”</strong>. Khi bấm “Tạo trang chọn”, hệ thống sẽ tự tải toàn bộ ảnh trong thư mục.</small>
-              </div>
-              <div class="field">
-                <label for="drive-key">Google Drive API Key <span class="opt">(nhập 1 lần, tự lưu)</span></label>
-                <input id="drive-key" type="password" placeholder="AIza..." autocomplete="off">
-                <small class="muted">Tạo tại <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">Google Cloud Console → Credentials → API Key</a>, rồi bật <strong>Google Drive API</strong> cho project. Key được lưu trên trình duyệt này, không gửi đi đâu khác.</small>
-              </div>
-            </div>
-
-            <div id="src-urls" hidden>
-              <div class="field grow">
-                <label for="url-list">Danh sách link ảnh <span class="opt">(mỗi dòng 1 link)</span></label>
-                <textarea id="url-list" rows="6" placeholder="https://.../anh-01.jpg&#10;https://.../anh-02.jpg"></textarea>
-              </div>
-            </div>
-
-            <div class="form-row-bottom">
-              <div class="field">
-                <label for="album-name">Tên album <span class="opt">(tuỳ chọn)</span></label>
-                <input id="album-name" placeholder="VD: Cưới Minh &amp; Lan">
-              </div>
-              <div class="field">
-                <label for="max-count">Số ảnh tối đa <span class="opt">(tuỳ chọn)</span></label>
-                <input id="max-count" type="number" min="0" step="1" placeholder="Bỏ trống = không giới hạn">
-              </div>
-              <button class="button primary" type="submit">Tạo trang chọn</button>
-            </div>
-
-            <label class="option-pill">
-              <input id="allow-notes" type="checkbox" checked>
-              <span>Cho phép khách ghi chú trên ảnh</span>
-            </label>
-          </form>
+          <button class="btn primary" id="new-album-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Tạo album mới</button>
         </div>
 
-        <aside class="panel result-panel">
-          <div class="section-head row">
-            <p class="eyebrow">Bước 2</p>
-            <h3>Sẵn sàng cho khách</h3>
+        <div class="toolbar">
+          <div class="filters" id="filters"></div>
+          <p class="tip">Chọn trạng thái để xem việc cần làm cho từng nhóm album.</p>
+        </div>
+
+        <div class="section-card">
+          <h2>Albums</h2>
+          <div class="albums-grid" id="albums-grid"></div>
+          <div class="empty" id="albums-empty" hidden>
+            <div class="ico">📁</div>
+            <strong>Chưa có album nào</strong>
+            <span>Bấm “Tạo album mới” để bắt đầu gửi ảnh cho khách chọn.</span>
+            <button class="btn primary" id="empty-new-btn" style="margin-top:6px">+ Tạo album mới</button>
           </div>
-          <div class="share-box">
-            <input id="album-status" readonly placeholder="Tạo album ở Bước 1 để hiện thông tin">
-            <button class="icon-button" id="copy-status" type="button" aria-label="Sao chép" disabled>
-              <svg viewBox="0 0 24 24"><path d="M8 8h11v11H8z"></path><path d="M5 16H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h11a1 1 0 0 1 1 1v1"></path></svg>
-            </button>
-          </div>
-          <p class="muted" id="album-detail">Album sẽ lưu ngay trên trình duyệt này. Bạn có thể mở lại tab “Chọn ảnh” bất cứ lúc nào.</p>
-          <div class="share-actions">
-            <button class="button subtle" id="reset-album" type="button" disabled>Làm lại</button>
-            <button class="button primary" id="open-gallery" type="button" disabled>Mở trang chọn ảnh →</button>
-          </div>
-        </aside>
+        </div>
       </section>
 
-      <div class="feature-grid">
-        <div class="feature">
-          <div class="ico"><svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-9.6-9.4C.7 7.7 3.4 4 7.1 4c2 0 3.6 1 4.9 2.7C13.3 5 14.9 4 16.9 4c3.7 0 6.4 3.7 4.7 7.6C19.5 16.4 12 21 12 21z"/></svg></div>
-          <h4>Chọn bằng 1 chạm</h4>
-          <p>Khách chỉ cần bấm trái tim trên mỗi ảnh để chọn hoặc bỏ chọn.</p>
-        </div>
-        <div class="feature">
-          <div class="ico"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></div>
-          <h4>Xem ảnh lớn</h4>
-          <p>Nhấn vào ảnh để phóng to, lướt qua lại và xem chi tiết trước khi chọn.</p>
-        </div>
-        <div class="feature">
-          <div class="ico"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></div>
-          <h4>Nhận danh sách</h4>
-          <p>Xuất danh sách tên ảnh đã chọn để studio lọc và xử lý nhanh chóng.</p>
-        </div>
-        <div class="feature">
-          <div class="ico"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></div>
-          <h4>Ghi chú yêu cầu</h4>
-          <p>Khách có thể ghi chú trên từng ảnh: chỉnh sáng, xoá mụn, ghép nền…</p>
-        </div>
-      </div>
-    </section>
-
-    <!-- ============== GALLERY ============== -->
-    <section class="view" id="gallery-view">
-      <div class="gallery-shell">
-        <div class="gallery-intro">
-          <div>
-            <p class="eyebrow">Trang chọn ảnh của khách</p>
-            <h1 id="gallery-title">Chọn những khoảnh khắc bạn yêu thích</h1>
-            <p class="lead" id="gallery-sub">Bấm vào trái tim để chọn ảnh. Nhấn vào ảnh để xem lớn.</p>
+      <!-- ===== PLACEHOLDER PAGES ===== -->
+      <section class="page" id="page-tools">
+        <div class="page-head"><div><h1>Tiện ích</h1><p class="sub">Công cụ hỗ trợ studio.</p></div></div>
+        <div class="section-card"><div class="placeholder"><div class="ico"><svg viewBox="0 0 24 24"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 0 0 5.4-5.4l-2.3 2.3-2-2 2.3-2.3z"/></svg></div><strong>Đang phát triển</strong><span>Khu vực tiện ích sẽ được bổ sung sau.</span></div></div>
+      </section>
+      <section class="page" id="page-nas">
+        <div class="page-head"><div><h1>Tài khoản NAS</h1><p class="sub">Kết nối kho lưu trữ / Google Drive cho studio.</p></div></div>
+        <div class="section-card">
+          <div class="field" style="max-width:520px">
+            <label for="nas-key">Google Drive API Key <span class="opt">(dùng để đọc thư mục Drive)</span></label>
+            <input id="nas-key" type="password" placeholder="AIza...">
+            <span class="hint">Key được lưu trên trình duyệt này. Tạo ở Google Cloud Console → Credentials → API Key, bật Google Drive API.</span>
           </div>
+          <button class="btn primary sm" id="nas-save" style="margin-top:14px">Lưu</button>
         </div>
-
-        <div class="selbar" id="selbar" hidden>
-          <span class="count-pill">Đã chọn <b id="sel-count">0</b><span id="sel-max"></span></span>
-          <div class="filter-chips">
-            <button class="chip active" data-filter="all">Tất cả</button>
-            <button class="chip" data-filter="selected">Đã chọn</button>
-            <button class="chip" data-filter="unselected">Chưa chọn</button>
+      </section>
+      <section class="page" id="page-brand">
+        <div class="page-head"><div><h1>Cài đặt thương hiệu</h1><p class="sub">Tên studio, lời chào hiển thị cho khách.</p></div></div>
+        <div class="section-card">
+          <div class="field" style="max-width:520px">
+            <label for="brand-name">Tên studio</label>
+            <input id="brand-name" placeholder="Lam Miên Studio">
           </div>
-          <span class="grow"></span>
-          <button class="button subtle" id="clear-sel" type="button">Bỏ chọn hết</button>
-          <button class="button primary" id="finish-btn" type="button">Hoàn tất chọn ảnh</button>
-          <div class="progress-wrap"><i id="progress-bar"></i></div>
+          <div class="field" style="max-width:520px; margin-top:14px">
+            <label for="brand-welcome">Lời chào khách (trang chọn ảnh)</label>
+            <input id="brand-welcome" placeholder="Chọn những khoảnh khắc bạn yêu thích">
+          </div>
+          <button class="btn primary sm" id="brand-save" style="margin-top:14px">Lưu</button>
         </div>
+      </section>
+      <section class="page" id="page-plan">
+        <div class="page-head"><div><h1>Gói dịch vụ</h1><p class="sub">Phiên bản hiện tại.</p></div></div>
+        <div class="section-card"><div class="placeholder"><div class="ico"><svg viewBox="0 0 24 24"><path d="m12 2 2.4 7.4H22l-6 4.4 2.3 7.2-6.3-4.6L5.7 21 8 13.8 2 9.4h7.6z"/></svg></div><strong>Bản dùng nội bộ</strong><span>Miễn phí cho Lam Miên Studio.</span></div></div>
+      </section>
+    </main>
+  </div>
 
-        <div class="gallery-empty" id="gallery-empty">
-          <div class="ico">🖼️</div>
-          <strong>Chưa có ảnh nào</strong>
-          <span class="muted">Quay lại tab “Tạo album” để tải ảnh lên rồi mở trang chọn.</span>
-          <a class="button primary" data-nav="create" style="margin-top:8px">← Tạo album</a>
-        </div>
-
-        <div class="photo-grid" id="photo-grid"></div>
+  <!-- ============== CLIENT PICKER (mở qua link chia sẻ) ============== -->
+  <div id="client" hidden>
+    <div class="client-top">
+      <svg class="logo" viewBox="0 0 52 52"><rect width="52" height="52" rx="14" fill="#7c5cfc"/><path d="M26 39s-11-6.5-11-14C15 20 18 16.5 22 16.5c1.9 0 3.6 1 4 2.6.4-1.6 2.1-2.6 4-2.6 4 0 7 3.5 7 8.5 0 7.5-11 14-11 14z" fill="#fff"/><circle cx="34.5" cy="18.5" r="2.4" fill="#fb6f92"/></svg>
+      <div><strong id="client-brand">Lam Miên Studio</strong><small>Trang chọn ảnh</small></div>
+    </div>
+    <div class="client-wrap">
+      <div class="client-intro">
+        <h1 id="client-title">Chọn những khoảnh khắc bạn yêu thích</h1>
+        <p>Bấm vào trái tim để chọn ảnh. Nhấn vào ảnh để xem lớn.</p>
       </div>
-    </section>
-
-    <!-- ============== GUIDE ============== -->
-    <section class="view" id="guide-view">
-      <div class="section-head">
-        <p class="eyebrow">Hướng dẫn</p>
-        <h1>Dùng trang chọn ảnh trong 4 bước</h1>
-        <p class="muted">Quy trình đơn giản cho cả studio và khách hàng của Lam Miên Studio.</p>
-      </div>
-      <div class="guide-grid">
-        <div class="step-card"><div class="n">1</div><h4>Tải ảnh lên</h4><p>Ở tab “Tạo album”, chọn nhiều ảnh từ máy hoặc dán danh sách link ảnh. Đặt tên album và số ảnh tối đa nếu cần.</p></div>
-        <div class="step-card"><div class="n">2</div><h4>Mở trang chọn</h4><p>Bấm “Tạo trang chọn” rồi “Mở trang chọn ảnh”. Album được lưu ngay trên trình duyệt, không cần đăng nhập.</p></div>
-        <div class="step-card"><div class="n">3</div><h4>Khách chọn ảnh</h4><p>Khách bấm trái tim để chọn, nhấn ảnh để xem lớn và ghi chú yêu cầu chỉnh sửa cho từng tấm.</p></div>
-        <div class="step-card"><div class="n">4</div><h4>Nhận danh sách</h4><p>Bấm “Hoàn tất” để xem tổng kết, sao chép hoặc tải danh sách tên ảnh đã chọn về cho studio xử lý.</p></div>
-      </div>
-    </section>
-  </main>
-
-  <!-- Lightbox -->
-  <div class="lightbox" id="lightbox" aria-hidden="true">
-    <div class="lb-stage">
-      <button class="lb-close" id="lb-close" aria-label="Đóng"><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
-      <div class="lb-img-wrap">
-        <button class="lb-nav lb-prev" id="lb-prev" aria-label="Ảnh trước"><svg viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></button>
-        <img id="lb-img" src="" alt="">
-        <button class="lb-nav lb-next" id="lb-next" aria-label="Ảnh sau"><svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></button>
-      </div>
-      <div class="lb-bar">
-        <span class="lb-name" id="lb-name"></span>
-        <div class="lb-note field" id="lb-note-wrap">
-          <input id="lb-note" placeholder="Ghi chú cho ảnh này (VD: chỉnh sáng, xoá mụn…)">
+      <div class="selbar" id="selbar">
+        <span class="count-pill">Đã chọn <b id="sel-count">0</b><span id="sel-max"></span></span>
+        <div class="chips">
+          <button class="chip active" data-filter="all">Tất cả</button>
+          <button class="chip" data-filter="selected">Đã chọn</button>
+          <button class="chip" data-filter="unselected">Chưa chọn</button>
         </div>
         <span class="grow"></span>
-        <button class="button subtle" id="lb-toggle" type="button">♡ Chọn ảnh này</button>
+        <button class="btn ghost sm" id="clear-sel">Bỏ chọn hết</button>
+        <button class="btn primary sm" id="finish-btn">Hoàn tất chọn ảnh</button>
+        <div class="bar"><i id="progress-bar"></i></div>
+      </div>
+      <div class="photo-grid" id="photo-grid"></div>
+    </div>
+  </div>
+
+  <!-- ============== CREATE ALBUM MODAL ============== -->
+  <div class="modal" id="create-modal">
+    <div class="modal-card wide">
+      <div class="modal-head">
+        <h3>Tạo album mới</h3>
+        <button class="icon-btn" id="create-close"><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+      </div>
+      <form id="create-form" autocomplete="off">
+        <div class="modal-body">
+          <div class="row2">
+            <div class="field"><label for="album-name">Tên album</label><input id="album-name" placeholder="VD: 8.6 Kiều Anh 12H"></div>
+            <div class="field"><label for="client-name">Tên khách <span class="opt">(tuỳ chọn)</span></label><input id="client-name" placeholder="VD: Mrs. Hoa"></div>
+          </div>
+          <div class="field">
+            <label>Nguồn ảnh</label>
+            <div class="seg" id="source-seg">
+              <button type="button" data-src="drive" class="active">Google Drive</button>
+              <button type="button" data-src="files">Tải từ máy</button>
+              <button type="button" data-src="urls">Dán link ảnh</button>
+              <button type="button" data-src="demo">Ảnh mẫu</button>
+            </div>
+          </div>
+          <div id="src-drive">
+            <div class="field"><label for="drive-url">Link thư mục Google Drive</label>
+              <textarea id="drive-url" rows="2" placeholder="https://drive.google.com/drive/folders/..."></textarea>
+              <span class="hint">Thư mục phải chia sẻ “Bất kỳ ai có đường liên kết”. Cần API Key (lưu ở mục “Tài khoản NAS”).</span>
+            </div>
+            <div class="field" style="margin-top:12px"><label for="drive-key">Google Drive API Key</label><input id="drive-key" type="password" placeholder="AIza..."></div>
+          </div>
+          <div id="src-files" hidden>
+            <label class="btn ghost" style="cursor:pointer; position:relative; overflow:hidden">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5M12 3v12"/></svg>
+              Chọn nhiều ảnh từ máy
+              <input id="file-input" type="file" accept="image/*" multiple style="position:absolute;inset:0;opacity:0;cursor:pointer">
+            </label>
+            <span class="hint" id="files-hint" style="display:block;margin-top:8px">Chưa chọn ảnh nào.</span>
+          </div>
+          <div id="src-urls" hidden>
+            <div class="field"><label for="url-list">Danh sách link ảnh <span class="opt">(mỗi dòng 1 link)</span></label>
+              <textarea id="url-list" rows="5" placeholder="https://.../anh-01.jpg"></textarea></div>
+          </div>
+          <div class="row2">
+            <div class="field"><label for="max-count">Số ảnh tối đa khách được chọn <span class="opt">(tuỳ chọn)</span></label><input id="max-count" type="number" min="0" step="1" placeholder="Bỏ trống = không giới hạn"></div>
+            <div class="field" style="justify-content:flex-end">
+              <label class="switch" style="margin-bottom:10px"><input id="allow-notes" type="checkbox" checked><span class="track"></span><span>Cho phép khách ghi chú</span></label>
+              <label class="switch"><input id="allow-download" type="checkbox"><span class="track"></span><span>Cho phép tải ảnh</span></label>
+            </div>
+          </div>
+        </div>
+        <div class="modal-foot">
+          <button class="btn ghost" type="button" id="create-cancel">Huỷ</button>
+          <button class="btn primary" type="submit" id="create-submit">Tạo album</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============== SHARE MODAL ============== -->
+  <div class="modal" id="share-modal">
+    <div class="modal-card">
+      <div class="modal-head"><h3>Link gửi khách</h3><button class="icon-btn" id="share-close"><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+      <div class="modal-body">
+        <p class="sub" style="margin:0;color:var(--muted)">Gửi link này cho khách để họ vào chọn ảnh. Khách không cần đăng nhập.</p>
+        <div class="field"><label>Link chọn ảnh</label><input id="share-link" readonly></div>
+        <div id="share-warn" class="hint" style="color:#fb7185" hidden>⚠ Album “Tải từ máy” chỉ xem được trên máy này — dùng nguồn Google Drive để có link chia sẻ cho khách.</div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn ghost" type="button" id="share-open">Mở thử</button>
+        <button class="btn primary" type="button" id="share-copy">Sao chép link</button>
       </div>
     </div>
   </div>
 
-  <!-- Summary modal -->
-  <div class="modal" id="summary-modal" aria-hidden="true">
+  <!-- ============== LIGHTBOX ============== -->
+  <div class="lightbox" id="lightbox">
+    <div class="lb-stage">
+      <button class="lb-close" id="lb-close"><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+      <div class="lb-img-wrap">
+        <button class="lb-nav lb-prev" id="lb-prev"><svg viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></button>
+        <img id="lb-img" src="" alt="">
+        <button class="lb-nav lb-next" id="lb-next"><svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></button>
+      </div>
+      <div class="lb-bar">
+        <span class="lb-name" id="lb-name"></span>
+        <div class="lb-note field" id="lb-note-wrap"><input id="lb-note" placeholder="Ghi chú cho ảnh này…"></div>
+        <span class="grow"></span>
+        <button class="btn ghost sm" id="lb-toggle">♡ Chọn ảnh này</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============== SUMMARY MODAL ============== -->
+  <div class="modal" id="summary-modal">
     <div class="modal-card">
-      <h3>Bạn đã chọn <span id="sum-count">0</span> ảnh 🎉</h3>
-      <p class="muted" id="sum-sub">Gửi danh sách này cho Lam Miên Studio để bắt đầu xử lý ảnh.</p>
-      <div class="summary-list" id="summary-list"></div>
-      <div class="modal-actions">
-        <button class="button subtle" id="sum-copy" type="button">Sao chép danh sách</button>
-        <button class="button subtle" id="sum-download" type="button">Tải file .txt</button>
-        <button class="button primary" id="sum-close" type="button">Đóng</button>
+      <div class="modal-head"><h3>Bạn đã chọn <span id="sum-count">0</span> ảnh 🎉</h3><button class="icon-btn" id="sum-x"><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+      <div class="modal-body">
+        <p class="sub" style="margin:0;color:var(--muted)">Gửi danh sách này cho Lam Miên Studio để bắt đầu xử lý ảnh.</p>
+        <div class="summary-list" id="summary-list"></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn ghost" type="button" id="sum-copy">Sao chép</button>
+        <button class="btn ghost" type="button" id="sum-download">Tải .txt</button>
+        <button class="btn primary" type="button" id="sum-close">Đóng</button>
       </div>
     </div>
   </div>
 
   <div class="toast" id="toast"></div>
-
-  <footer class="site-footer">
-    © <span id="year"></span> <strong>Lam Miên Studio</strong> — Trang chọn &amp; lọc ảnh cho khách hàng.
-  </footer>
-
   <script src="app.js"></script>
 </body>
 </html>
