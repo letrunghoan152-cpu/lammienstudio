@@ -11,6 +11,7 @@
   const BRAND_KEY = 'lamMienBrand';
   const LOGIN_USER = 'lammien';
   const LOGIN_PASS = 'lammien';
+  const FIXED_DRIVE_KEY = 'AIzaSyB30IdJg_FKZpi2oOmF8bS7qMEna5P2dpg';
 
   const STATUSES = [
     { key: 'draft',     label: 'Bản nháp',          cls: 'st-draft',     color: '#94a3b8' },
@@ -36,6 +37,23 @@
   function genId() { return 'al' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
   function escapeHtml(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
   function escapeAttr(s) { return escapeHtml(s).replace(/'/g, '&#39;'); }
+  function pad2(n) { return String(n).padStart(2, '0'); }
+  function fmtVN(dateStr) { if (!dateStr) return ''; const d = new Date(dateStr + 'T00:00:00'); if (isNaN(d)) return ''; return `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${d.getFullYear()}`; }
+  function addDays(dateStr, n) { if (!dateStr || !n) return ''; const d = new Date(dateStr + 'T00:00:00'); if (isNaN(d)) return ''; d.setDate(d.getDate() + n); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; }
+  // Lấy ngày chụp + giờ + tên khách từ chuỗi kiểu "8.6 Kiều Anh 12H"
+  function parseAlbumMeta(str) {
+    const year = new Date().getFullYear();
+    let shootDate = '', hour = null, client = String(str || '');
+    const dm = client.match(/(\d{1,2})\s*[.\/-]\s*(\d{1,2})/);            // 8.6 / 8/6 / 8-6
+    if (dm) { const day = +dm[1], month = +dm[2]; if (day >= 1 && day <= 31 && month >= 1 && month <= 12) shootDate = `${year}-${pad2(month)}-${pad2(day)}`; }
+    const hm = client.match(/(\d{1,2})\s*[hH](?![a-zA-Z])/);             // 12H
+    if (hm) hour = +hm[1];
+    if (dm) client = client.replace(dm[0], ' ');
+    if (hm) client = client.replace(hm[0], ' ');
+    client = client.replace(/\s+/g, ' ').trim();
+    return { shootDate, hour, client };
+  }
+  function recomputeDeadline(al) { al.deadline = (al.shootDate && al.deadlineDays) ? addDays(al.shootDate, al.deadlineDays) : ''; }
   function fmtAgo(ts) {
     if (!ts) return 'vừa xong';
     const s = Math.floor((Date.now() - ts) / 1000);
@@ -139,10 +157,7 @@
   /* ---------- Create modal ---------- */
   function openCreate() {
     $('#create-form').reset();
-    $('#drive-key').value = getDriveKey();
     $('#allow-notes').checked = true; $('#allow-download').checked = false;
-    pickedFiles = []; $('#files-hint').textContent = 'Chưa chọn ảnh nào.';
-    setSource('drive');
     $('#create-modal').classList.add('open');
   }
   function closeCreate() { $('#create-modal').classList.remove('open'); }
@@ -152,61 +167,38 @@
   $('#create-cancel').addEventListener('click', closeCreate);
   $('#create-modal').addEventListener('click', e => { if (e.target.id === 'create-modal') closeCreate(); });
 
-  function setSource(src) {
-    currentSource = src;
-    $$('#source-seg button').forEach(b => b.classList.toggle('active', b.dataset.src === src));
-    $('#src-drive').hidden = src !== 'drive';
-    $('#src-files').hidden = src !== 'files';
-    $('#src-urls').hidden = src !== 'urls';
-  }
-  $('#source-seg').addEventListener('click', e => { const b = e.target.closest('button[data-src]'); if (b) setSource(b.dataset.src); });
-  $('#file-input').addEventListener('change', e => {
-    pickedFiles = Array.from(e.target.files || []);
-    $('#files-hint').textContent = pickedFiles.length ? `Đã chọn ${pickedFiles.length} ảnh.` : 'Chưa chọn ảnh nào.';
-  });
-  function readFileAsDataURL(f) { return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(f); }); }
-
   $('#create-form').addEventListener('submit', async e => {
     e.preventDefault();
     const btn = $('#create-submit');
-    let photos = [], sourceUrl = '';
+    const rawName = $('#album-name').value.trim();
+    if (!rawName) { toast('Hãy nhập tên khách / mã buổi chụp'); return; }
+    const folder = $('#drive-url').value.trim();
+    if (!folder) { toast('Hãy dán link thư mục Google Drive'); return; }
+
+    let photos = [];
     try {
-      if (currentSource === 'drive') {
-        const folder = $('#drive-url').value.trim(); const key = $('#drive-key').value.trim();
-        if (!folder) { toast('Hãy dán link thư mục Google Drive'); return; }
-        setDriveKey(key); sourceUrl = folder;
-        btn.disabled = true; btn.textContent = 'Đang tải ảnh…'; toast('Đang tải ảnh từ Google Drive…');
-        photos = await buildDrivePhotos(folder, key);
-      } else if (currentSource === 'files') {
-        if (!pickedFiles.length) { toast('Hãy chọn ít nhất 1 ảnh'); return; }
-        btn.disabled = true; btn.textContent = 'Đang nạp ảnh…';
-        photos = await Promise.all(pickedFiles.map(async (f, i) => ({ id: 'p' + i, name: f.name, src: await readFileAsDataURL(f), selected: false, note: '' })));
-      } else if (currentSource === 'urls') {
-        const lines = $('#url-list').value.split('\n').map(s => s.trim()).filter(Boolean);
-        if (!lines.length) { toast('Hãy dán ít nhất 1 link ảnh'); return; }
-        photos = lines.map((u, i) => {
-          const fid = driveFileId(u);
-          if (fid && /drive\.google\.com/.test(u)) return { id: 'p' + i, name: `drive_${i + 1}.jpg`, src: driveThumb(fid, 'w800'), full: driveThumb(fid, 'w1920'), selected: false, note: '' };
-          return { id: 'p' + i, name: u.split('/').pop().split('?')[0] || `anh_${i + 1}.jpg`, src: u, selected: false, note: '' };
-        });
-      } else {
-        photos = DEMO.map((d, i) => ({ id: 'p' + i, name: d.name, src: d.src, selected: false, note: '' }));
-      }
+      btn.disabled = true; btn.textContent = 'Đang tải ảnh…'; toast('Đang tải ảnh từ Google Drive…');
+      photos = await buildDrivePhotos(folder, FIXED_DRIVE_KEY);
     } catch (err) { toast('Lỗi: ' + (err.message || err)); return; }
     finally { btn.disabled = false; btn.textContent = 'Tạo album'; }
 
+    const meta = parseAlbumMeta(rawName);
+    const days = parseInt($('#deadline-days').value, 10);
+    const deadlineDays = Number.isFinite(days) && days >= 0 ? days : 0;
     const max = parseInt($('#max-count').value, 10);
     const al = {
       id: genId(),
-      name: $('#album-name').value.trim() || 'Album chưa đặt tên',
-      client: $('#client-name').value.trim(),
+      name: rawName,
+      client: meta.client || '',
       status: 'waiting',
       maxCount: Number.isFinite(max) && max > 0 ? max : 0,
       allowNotes: $('#allow-notes').checked,
       allowDownload: $('#allow-download').checked,
-      shootDate: $('#shoot-date').value || '',
-      deadline: $('#deadline-date').value || '',
-      sourceUrl,
+      shootDate: meta.shootDate,
+      shootHour: meta.hour,
+      deadlineDays,
+      deadline: meta.shootDate && deadlineDays ? addDays(meta.shootDate, deadlineDays) : '',
+      sourceUrl: folder,
       createdAt: Date.now(), lastActivity: Date.now(),
       photos
     };
@@ -544,16 +536,20 @@
 
   function buildProgRow(al) {
     const bd = deadlineBadge(al);
+    const hourTxt = (al.shootHour != null) ? ` · ${al.shootHour}h` : '';
     const row = document.createElement('div');
     row.className = 'prog-row';
     row.innerHTML = `
-      <div class="who"><strong>${escapeHtml(al.name)}</strong><small>${al.client ? escapeHtml(al.client) : 'Chưa có tên khách'}</small></div>
+      <div class="who"><strong>${escapeHtml(al.name)}</strong><small>${al.client ? escapeHtml(al.client) : '—'}${hourTxt}</small></div>
       <input type="date" data-f="shoot" value="${escapeAttr(al.shootDate || '')}">
-      <input type="date" data-f="deadline" value="${escapeAttr(al.deadline || '')}">
+      <div class="dl-cell">
+        <input type="number" min="0" step="1" data-f="days" value="${al.deadlineDays || ''}" placeholder="số ngày">
+        <small>${al.deadline ? '→ ' + fmtVN(al.deadline) : (al.shootDate ? 'nhập số ngày' : 'cần ngày chụp')}</small>
+      </div>
       <select data-f="status">${STATUSES.map(s => `<option value="${s.key}"${s.key === al.status ? ' selected' : ''}>${s.label}</option>`).join('')}</select>
       <span class="deadline-badge ${bd.cls}"><span class="dot"></span>${bd.txt}</span>`;
-    row.querySelector('[data-f="shoot"]').addEventListener('change', e => { al.shootDate = e.target.value; al.lastActivity = Date.now(); saveAlbums(); });
-    row.querySelector('[data-f="deadline"]').addEventListener('change', e => { al.deadline = e.target.value; al.lastActivity = Date.now(); saveAlbums(); renderProgress(); });
+    row.querySelector('[data-f="shoot"]').addEventListener('change', e => { al.shootDate = e.target.value; recomputeDeadline(al); al.lastActivity = Date.now(); saveAlbums(); renderProgress(); });
+    row.querySelector('[data-f="days"]').addEventListener('change', e => { const n = parseInt(e.target.value, 10); al.deadlineDays = Number.isFinite(n) && n >= 0 ? n : 0; recomputeDeadline(al); al.lastActivity = Date.now(); saveAlbums(); renderProgress(); });
     row.querySelector('[data-f="status"]').addEventListener('change', e => { al.status = e.target.value; al.lastActivity = Date.now(); saveAlbums(); renderProgress(); });
     return row;
   }

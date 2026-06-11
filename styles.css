@@ -256,8 +256,10 @@ select {
 .prog-row:hover { background: var(--panel-2); }
 .prog-row .who strong { display: block; font-size: 14.5px; }
 .prog-row .who small { color: var(--muted); font-size: 12.5px; }
-.prog-row input[type="date"] { height: 38px; padding: 0 10px; font-size: 13px; }
+.prog-row input[type="date"], .prog-row input[type="number"] { height: 38px; padding: 0 10px; font-size: 13px; }
 .prog-row select { height: 38px; padding: 0 30px 0 12px; font-size: 13px; }
+.dl-cell { display: flex; flex-direction: column; gap: 4px; }
+.dl-cell small { color: var(--muted-2); font-size: 11.5px; }
 
 .deadline-badge { display: inline-flex; align-items: center; gap: 7px; padding: 7px 12px; border-radius: 99px; font-size: 12.5px; font-weight: 700; white-space: nowrap; }
 .deadline-badge .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }

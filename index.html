@@ -103,7 +103,7 @@
           <div class="prog-head">
             <span>Khách hàng / Album</span>
             <span>Ngày chụp</span>
-            <span>Hạn trả ảnh</span>
+            <span>Hạn trả (số ngày)</span>
             <span>Trạng thái</span>
             <span>Deadline</span>
           </div>
@@ -154,48 +154,30 @@
       </div>
       <form id="create-form" autocomplete="off">
         <div class="modal-body">
-          <div class="row2">
-            <div class="field"><label for="album-name">Tên album</label><input id="album-name" placeholder="VD: 8.6 Kiều Anh 12H"></div>
-            <div class="field"><label for="client-name">Tên khách <span class="opt">(tuỳ chọn)</span></label><input id="client-name" placeholder="VD: Mrs. Hoa"></div>
+          <div class="field">
+            <label for="album-name">Tên khách / mã buổi chụp</label>
+            <input id="album-name" placeholder="VD: 8.6 Kiều Anh 12H">
+            <span class="hint">Ngày chụp tự nhận từ tên: <strong>“8.6 … 12H”</strong> = chụp 8/6 lúc 12h.</span>
           </div>
           <div class="row2">
-            <div class="field"><label for="shoot-date">Ngày chụp <span class="opt">(tuỳ chọn)</span></label><input id="shoot-date" type="date"></div>
-            <div class="field"><label for="deadline-date">Hạn trả ảnh <span class="opt">(tuỳ chọn)</span></label><input id="deadline-date" type="date"></div>
+            <div class="field">
+              <label for="deadline-days">Số ngày trả ảnh</label>
+              <input id="deadline-days" type="number" min="0" step="1" placeholder="VD: 15">
+              <span class="hint">Hạn trả = ngày chụp + số ngày này.</span>
+            </div>
+            <div class="field">
+              <label for="max-count">Số ảnh tối đa khách chọn <span class="opt">(tuỳ chọn)</span></label>
+              <input id="max-count" type="number" min="0" step="1" placeholder="Bỏ trống = không giới hạn">
+            </div>
           </div>
           <div class="field">
-            <label>Nguồn ảnh</label>
-            <div class="seg" id="source-seg">
-              <button type="button" data-src="drive" class="active">Google Drive</button>
-              <button type="button" data-src="files">Tải từ máy</button>
-              <button type="button" data-src="urls">Dán link ảnh</button>
-              <button type="button" data-src="demo">Ảnh mẫu</button>
-            </div>
-          </div>
-          <div id="src-drive">
-            <div class="field"><label for="drive-url">Link thư mục Google Drive</label>
-              <textarea id="drive-url" rows="2" placeholder="https://drive.google.com/drive/folders/..."></textarea>
-              <span class="hint">Thư mục phải chia sẻ “Bất kỳ ai có đường liên kết”. Cần API Key (lưu ở mục “Tài khoản NAS”).</span>
-            </div>
-            <div class="field" style="margin-top:12px"><label for="drive-key">Google Drive API Key</label><input id="drive-key" type="password" placeholder="AIza..."></div>
-          </div>
-          <div id="src-files" hidden>
-            <label class="btn ghost" style="cursor:pointer; position:relative; overflow:hidden">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5M12 3v12"/></svg>
-              Chọn nhiều ảnh từ máy
-              <input id="file-input" type="file" accept="image/*" multiple style="position:absolute;inset:0;opacity:0;cursor:pointer">
-            </label>
-            <span class="hint" id="files-hint" style="display:block;margin-top:8px">Chưa chọn ảnh nào.</span>
-          </div>
-          <div id="src-urls" hidden>
-            <div class="field"><label for="url-list">Danh sách link ảnh <span class="opt">(mỗi dòng 1 link)</span></label>
-              <textarea id="url-list" rows="5" placeholder="https://.../anh-01.jpg"></textarea></div>
+            <label for="drive-url">Link thư mục Google Drive</label>
+            <textarea id="drive-url" rows="2" placeholder="https://drive.google.com/drive/folders/..."></textarea>
+            <span class="hint">Thư mục Drive phải chia sẻ ở chế độ “Bất kỳ ai có đường liên kết”.</span>
           </div>
           <div class="row2">
-            <div class="field"><label for="max-count">Số ảnh tối đa khách được chọn <span class="opt">(tuỳ chọn)</span></label><input id="max-count" type="number" min="0" step="1" placeholder="Bỏ trống = không giới hạn"></div>
-            <div class="field" style="justify-content:flex-end">
-              <label class="switch" style="margin-bottom:10px"><input id="allow-notes" type="checkbox" checked><span class="track"></span><span>Cho phép khách ghi chú</span></label>
-              <label class="switch"><input id="allow-download" type="checkbox"><span class="track"></span><span>Cho phép tải ảnh</span></label>
-            </div>
+            <label class="switch"><input id="allow-notes" type="checkbox" checked><span class="track"></span><span>Cho phép khách ghi chú</span></label>
+            <label class="switch"><input id="allow-download" type="checkbox"><span class="track"></span><span>Cho phép tải ảnh</span></label>
           </div>
         </div>
         <div class="modal-foot">
