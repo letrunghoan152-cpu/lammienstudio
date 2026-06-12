@@ -470,7 +470,7 @@
     });
     let ci = 0;
     if (al.cover) { const idx = al.photos.findIndex(x => (x.full || x.src) === al.cover); if (idx >= 0) ci = idx; }
-    const payload = { n: al.name, m: al.maxCount, an: al.allowNotes ? 1 : 0, dl: al.allowDownload ? 1 : 0, b: brand.name, w: brand.welcome, ci, p };
+    const payload = { aid: al.id, n: al.name, m: al.maxCount, an: al.allowNotes ? 1 : 0, dl: al.allowDownload ? 1 : 0, b: brand.name, w: brand.welcome, ci, p };
     return b64encode(JSON.stringify(payload));
   }
   function albumLink(al) { return location.origin + location.pathname + '#a=' + encodeAlbum(al); }
@@ -509,6 +509,8 @@
     const m = location.hash.match(/[#&]a=([^&]+)/);
     if (!m) return null;
     let payload; try { payload = JSON.parse(b64decode(m[1])); } catch (_) { return null; }
+    // Nếu album này có sẵn trên máy (cùng trình duyệt studio) -> thao tác thẳng trên album thật
+    if (payload.aid) { const local = albums.find(x => x.id === payload.aid); if (local) return { album: local, bound: true }; }
     const id = strHash(m[1]);
     const photos = (payload.p || []).map((row, i) => {
       if (row.length === 2) { const did = row[1]; return { id: 'g' + i, name: row[0] || `anh_${i + 1}`, driveId: did, src: driveThumb(did, 'w400'), full: driveThumb(did, 'w1600'), selected: false, note: '' }; }
@@ -518,7 +520,7 @@
     const cover = photos[cidx] ? (photos[cidx].full || photos[cidx].src) : (payload.c || '');
     let al = { id, name: payload.n || 'Album', maxCount: payload.m || 0, allowNotes: !!payload.an, allowDownload: !!payload.dl, brandName: payload.b || 'Lam Miên Studio', welcome: payload.w || '', cover, photos };
     try { const saved = localStorage.getItem('lamMienGuest_' + id); if (saved) { const s = JSON.parse(saved); if (s && s.photos && s.photos.length) al = s; } } catch (_) {}
-    return al;
+    return { album: al, bound: false };
   }
 
   /* ---------- Client picker ---------- */
@@ -865,7 +867,7 @@
 
   const shared = decodeSharedAlbum();
   if (shared) {
-    openClient(shared, false);
+    openClient(shared.album, shared.bound);
   } else if (localStorage.getItem(AUTH_KEY) === '1') {
     showApp();
   } else {
