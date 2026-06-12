@@ -528,7 +528,10 @@
     const brandName = al.brandName || brand.name;
     const welcome = al.welcome || brand.welcome || 'Chọn những khoảnh khắc bạn yêu thích';
     $('#client-brand').textContent = brandName;
-    $('#client-title').textContent = al.name || 'Album của bạn';
+    // chuẩn hoá trạng thái cũ (p.selected -> review)
+    al.photos.forEach(p => { if (!p.review) p.review = p.selected ? 'selected' : ''; });
+    // bật/tắt nút tải theo cài đặt album
+    $('#dl-all').hidden = !al.allowDownload;
     // banner ảnh bìa
     const cov = albumCover(al);
     $('#client-cover').hidden = !cov;
@@ -543,7 +546,8 @@
       if (!back) { back = document.createElement('button'); back.id = 'client-back'; back.className = 'btn ghost sm'; back.textContent = '← Bảng điều khiển'; back.style.marginLeft = 'auto'; $('.client-top').appendChild(back); back.addEventListener('click', () => { saveClient(); showApp(); }); }
       back.hidden = false;
     } else if (back) { back.hidden = true; }
-    $$('.chips .chip').forEach(c => c.classList.toggle('active', c.dataset.filter === 'all'));
+    clientFilter = 'all';
+    $$('#ctabs .ctab').forEach(c => c.classList.toggle('active', c.dataset.f === 'all'));
     renderClient();
     window.scrollTo({ top: 0 });
   }
@@ -552,18 +556,43 @@
     if (clientBound) { clientAlbum.lastActivity = Date.now(); saveAlbums(); }
     else { try { localStorage.setItem('lamMienGuest_' + clientAlbum.id, JSON.stringify(clientAlbum)); } catch (_) {} }
   }
-  function cSel() { return clientAlbum ? clientAlbum.photos.filter(p => p.selected) : []; }
+  function cSel() { return clientAlbum ? clientAlbum.photos.filter(p => p.review === 'selected') : []; }
+  function cCount(state) { return clientAlbum ? clientAlbum.photos.filter(p => p.review === state).length : 0; }
 
-  const HEART_SVG = '<svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-9.6-9.4C.7 7.7 3.4 4 7.1 4c2 0 3.6 1 4.9 2.7C13.3 5 14.9 4 16.9 4c3.7 0 6.4 3.7 4.7 7.6C19.5 16.4 12 21 12 21z"/></svg>';
+  const ICN = {
+    dl: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>',
+    note: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
+    skip: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>',
+    copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M5 16H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h11a1 1 0 0 1 1 1v1"/></svg>'
+  };
   function buildPhotoCard(p) {
-    const card = document.createElement('div');
-    card.className = 'pcard' + (p.selected ? ' sel' : '');
+    const card = document.createElement('figure');
+    card.className = 'pcard' + (p.review ? ' s-' + p.review : '');
     card.dataset.id = p.id;
-    card.innerHTML = `<img src="${escapeAttr(p.src)}" alt="${escapeAttr(p.name)}" loading="lazy" decoding="async">
-      <button class="pick">${HEART_SVG}</button>
-      <div class="cap"><span>${escapeHtml(p.name)}</span>${p.note ? '<span>📝</span>' : ''}</div>`;
-    card.querySelector('.pick').addEventListener('click', ev => { ev.stopPropagation(); cToggle(p.id); });
+    const dl = (clientAlbum && clientAlbum.allowDownload) ? `<button class="mini" data-a="download" title="Tải ảnh gốc">${ICN.dl}</button>` : '';
+    card.innerHTML = `
+      <div class="pcard-top"><span class="fname" title="${escapeAttr(p.name)}">${escapeHtml(p.name)}</span><button class="mini" data-a="copy" title="Chép tên ảnh">${ICN.copy}</button></div>
+      ${p.note ? '<span class="note-dot" title="Có ghi chú">📝</span>' : ''}
+      <img src="${escapeAttr(p.src)}" alt="${escapeAttr(p.name)}" loading="lazy" decoding="async">
+      <div class="pcard-acts">
+        ${dl}
+        <button class="mini" data-a="note" title="Ghi chú">${ICN.note}</button>
+        <button class="mini" data-a="skip" title="Bỏ qua">${ICN.skip}</button>
+        <span class="grow"></span>
+        <button class="pill later${p.review === 'later' ? ' on' : ''}" data-a="later">Xem lại sau</button>
+        <button class="pill choose" data-a="choose">${p.review === 'selected' ? '✓ Đã chọn' : 'Chọn'}</button>
+      </div>`;
     card.querySelector('img').addEventListener('click', () => openLightbox(clientAlbum.photos, clientAlbum.photos.indexOf(p), 'client'));
+    card.querySelectorAll('[data-a]').forEach(b => b.addEventListener('click', ev => {
+      ev.stopPropagation();
+      const a = b.dataset.a;
+      if (a === 'choose') setReview(p.id, 'selected');
+      else if (a === 'later') setReview(p.id, 'later');
+      else if (a === 'skip') setReview(p.id, 'skipped');
+      else if (a === 'note') openNote(p.id);
+      else if (a === 'download') downloadPhoto(p);
+      else if (a === 'copy') copyText(p.name, 'Đã chép tên ảnh');
+    }));
     return card;
   }
   function appendClientBatch() {
@@ -581,45 +610,93 @@
     if (clientShown >= clientList.length) return;
     sentinel = document.createElement('div');
     sentinel.id = 'client-sentinel';
-    sentinel.style.cssText = 'height:1px;grid-column:1/-1';
-    $('#photo-grid').appendChild(sentinel);
+    sentinel.style.cssText = 'height:1px';
+    $('#photo-grid').after(sentinel);
     clientObserver = new IntersectionObserver(entries => {
-      if (entries.some(e => e.isIntersecting)) {
-        sentinel.remove();
-        appendClientBatch();
-        setupClientSentinel();
-      }
-    }, { rootMargin: '800px' });
+      if (entries.some(e => e.isIntersecting)) { sentinel.remove(); appendClientBatch(); setupClientSentinel(); }
+    }, { rootMargin: '900px' });
     clientObserver.observe(sentinel);
+  }
+  function passFilter(p) {
+    switch (clientFilter) {
+      case 'selected': return p.review === 'selected';
+      case 'later': return p.review === 'later';
+      case 'skipped': return p.review === 'skipped';
+      case 'unseen': return !p.review;
+      default: return true;
+    }
   }
   function renderClient() {
     const grid = $('#photo-grid'); grid.innerHTML = '';
     if (!clientAlbum) return;
-    clientList = clientAlbum.photos.filter(p => clientFilter === 'all' || (clientFilter === 'selected' && p.selected) || (clientFilter === 'unselected' && !p.selected));
+    clientList = clientAlbum.photos.filter(passFilter);
     clientShown = 0;
-    appendClientBatch();      // vẽ lô đầu ngay
-    setupClientSentinel();    // các lô sau nạp khi cuộn tới
+    appendClientBatch();
+    setupClientSentinel();
     updateClientUI();
   }
-  function cToggle(id) {
+  function replaceCard(p) {
+    const old = $('#photo-grid').querySelector(`.pcard[data-id="${p.id}"]`);
+    if (old) old.replaceWith(buildPhotoCard(p));
+  }
+  function setReview(id, state) {
     const p = clientAlbum.photos.find(x => x.id === id); if (!p) return;
-    if (!p.selected && clientAlbum.maxCount && cSel().length >= clientAlbum.maxCount) { toast(`Chỉ được chọn tối đa ${clientAlbum.maxCount} ảnh`); return; }
-    p.selected = !p.selected; saveClient();
-    const card = $('#photo-grid').querySelector(`.pcard[data-id="${p.id}"]`);
-    if (card) card.classList.toggle('sel', p.selected);
+    if (state === 'selected' && p.review !== 'selected' && clientAlbum.maxCount && cSel().length >= clientAlbum.maxCount) {
+      toast(`Chỉ được chọn tối đa ${clientAlbum.maxCount} ảnh`); return;
+    }
+    p.review = (p.review === state) ? '' : state;
+    p.selected = (p.review === 'selected');
+    saveClient();
+    if (clientFilter === 'all') replaceCard(p); else renderClient();
     updateClientUI();
     if (lbIndex >= 0) syncLb();
-    if (clientFilter !== 'all') renderClient();   // đang lọc thì cập nhật lại danh sách hiển thị
   }
   function updateClientUI() {
     const n = cSel().length;
     $('#sel-count').textContent = n;
     $('#sel-max').textContent = clientAlbum.maxCount ? ` / ${clientAlbum.maxCount}` : '';
-    const total = clientAlbum.photos.length || 1;
-    $('#progress-bar').style.width = (n / total * 100) + '%';
+    $('#progress-bar').style.width = (clientAlbum.maxCount ? Math.min(100, n / clientAlbum.maxCount * 100) : (n / (clientAlbum.photos.length || 1) * 100)) + '%';
+    $('#cinfo').textContent = `Hiển thị ${clientList.length} ảnh · Tổng ${clientAlbum.photos.length} · Đã chọn ${n}${clientAlbum.maxCount ? '/' + clientAlbum.maxCount : ''} · Xem lại sau ${cCount('later')} · Bỏ qua ${cCount('skipped')}`;
   }
-  $$('.chips .chip').forEach(c => c.addEventListener('click', () => { clientFilter = c.dataset.filter; $$('.chips .chip').forEach(x => x.classList.toggle('active', x === c)); renderClient(); }));
-  $('#clear-sel').addEventListener('click', () => { if (!cSel().length) return; if (!window.confirm('Bỏ chọn tất cả?')) return; clientAlbum.photos.forEach(p => p.selected = false); saveClient(); renderClient(); });
+  $$('#ctabs .ctab').forEach(c => c.addEventListener('click', () => { clientFilter = c.dataset.f; $$('#ctabs .ctab').forEach(x => x.classList.toggle('active', x === c)); renderClient(); }));
+
+  /* ---------- Ghi chú ---------- */
+  let noteTargetId = null;
+  function openNote(id) {
+    const p = clientAlbum.photos.find(x => x.id === id); if (!p) return;
+    noteTargetId = id; $('#note-photo-name').textContent = p.name || '';
+    $('#note-text').value = p.note || ''; $('#note-modal').classList.add('open');
+    setTimeout(() => $('#note-text').focus(), 50);
+  }
+  function closeNote() { $('#note-modal').classList.remove('open'); noteTargetId = null; }
+  $('#note-x').addEventListener('click', closeNote);
+  $('#note-cancel').addEventListener('click', closeNote);
+  $('#note-modal').addEventListener('click', e => { if (e.target.id === 'note-modal') closeNote(); });
+  $('#note-save').addEventListener('click', () => {
+    const p = clientAlbum && clientAlbum.photos.find(x => x.id === noteTargetId);
+    if (p) { p.note = $('#note-text').value.trim(); saveClient(); if (clientFilter === 'all') replaceCard(p); else renderClient(); if (lbIndex >= 0) syncLb(); toast('Đã lưu ghi chú'); }
+    closeNote();
+  });
+
+  /* ---------- Tải ảnh gốc từ Drive ---------- */
+  function driveDownloadUrl(p) { const id = p.driveId || driveIdFromThumb(p.src); return id ? `https://drive.google.com/uc?export=download&id=${id}` : (p.full || p.src); }
+  function downloadPhoto(p) {
+    if (clientAlbum && !clientAlbum.allowDownload) { toast('Album này không cho phép tải ảnh'); return; }
+    const a = document.createElement('a'); a.href = driveDownloadUrl(p); a.download = p.name || 'photo.jpg'; a.target = '_blank'; a.rel = 'noopener';
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+  $('#dl-all').addEventListener('click', () => {
+    const sel = cSel(); if (!sel.length) { toast('Chưa có ảnh đã chọn để tải'); return; }
+    toast(`Đang tải ${sel.length} ảnh gốc…`);
+    sel.forEach((p, i) => setTimeout(() => downloadPhoto(p), i * 900));
+  });
+
+  /* ---------- Scroll to top ---------- */
+  $('#scroll-top').addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+  window.addEventListener('scroll', () => {
+    const st = $('#scroll-top'); if (!st) return;
+    st.classList.toggle('show', !$('#client').hidden && window.scrollY > 600);
+  });
 
   /* ---------- Lightbox / trình xem ảnh ---------- */
   let lbPhotos = [], lbMode = 'client', lbLoadToken = 0;
@@ -646,22 +723,40 @@
     lbPhotos = photos || []; lbMode = mode || 'client'; lbIndex = i;
     const p = lbPhotos[i]; if (!p) return;
     showLbPhoto(p);
-    $('#lb-name').textContent = `${p.name || ''}  ·  ${i + 1}/${lbPhotos.length}`;
+    $('#lb-name').textContent = p.name || '';
     preloadAround(i);
     const isClient = lbMode === 'client';
-    $('#lb-toggle').hidden = !isClient;
-    $('#lb-note-wrap').hidden = !(isClient && clientAlbum && clientAlbum.allowNotes);
-    if (isClient) { $('#lb-note').value = p.note || ''; syncLb(); }
+    $('#lb-acts').hidden = !isClient;
+    $('#lb-dl').hidden = !(isClient && clientAlbum && clientAlbum.allowDownload);
+    $('#lb-note-btn').hidden = !(isClient && clientAlbum && clientAlbum.allowNotes);
+    if (isClient) syncLb(); else $('#lb-sub').textContent = `${i + 1} / ${lbPhotos.length} ảnh`;
     $('#lightbox').classList.add('open');
   }
   function closeLb() { $('#lightbox').classList.remove('open'); lbIndex = -1; }
   function lbStep(d) { if (lbIndex < 0 || !lbPhotos.length) return; openLightbox(lbPhotos, (lbIndex + d + lbPhotos.length) % lbPhotos.length, lbMode); }
-  function syncLb() { const p = lbPhotos[lbIndex]; if (!p) return; const b = $('#lb-toggle'); b.textContent = p.selected ? '♥ Bỏ chọn' : '♡ Chọn ảnh này'; b.classList.toggle('primary', !p.selected); }
+  function syncLb() {
+    const p = lbPhotos[lbIndex]; if (!p) return;
+    $('#lb-name').textContent = `${p.name || ''}${p.note ? '  📝' : ''}`;
+    if (lbMode === 'client' && clientAlbum) {
+      const n = cSel().length, max = clientAlbum.maxCount;
+      const remain = max ? Math.max(0, max - n) : null;
+      const pct = max ? Math.min(100, n / max * 100) : 0;
+      $('#lb-sub').innerHTML = (max ? `Còn ${remain} ảnh có thể chọn · ${n}/${max}` : `Đã chọn ${n} ảnh`) +
+        (max ? ` <span class="lb-pg"><i style="width:${pct}%"></i></span>` : '') +
+        `<br><small>${lbIndex + 1} / ${lbPhotos.length} ảnh</small>`;
+      const ch = $('#lb-choose'); ch.textContent = p.review === 'selected' ? '✓ Đã chọn' : 'Chọn'; ch.classList.toggle('on', p.review === 'selected');
+      const lt = $('#lb-later'); lt.classList.toggle('on', p.review === 'later');
+    } else {
+      $('#lb-sub').textContent = `${lbIndex + 1} / ${lbPhotos.length} ảnh`;
+    }
+  }
   $('#lb-close').addEventListener('click', closeLb);
   $('#lb-prev').addEventListener('click', () => lbStep(-1));
   $('#lb-next').addEventListener('click', () => lbStep(1));
-  $('#lb-toggle').addEventListener('click', () => { if (lbMode === 'client' && lbIndex >= 0) cToggle(lbPhotos[lbIndex].id); });
-  $('#lb-note').addEventListener('input', e => { const p = lbPhotos[lbIndex]; if (p) { p.note = e.target.value; saveClient(); } });
+  $('#lb-choose').addEventListener('click', () => { if (lbMode === 'client' && lbIndex >= 0) setReview(lbPhotos[lbIndex].id, 'selected'); });
+  $('#lb-later').addEventListener('click', () => { if (lbMode === 'client' && lbIndex >= 0) setReview(lbPhotos[lbIndex].id, 'later'); });
+  $('#lb-note-btn').addEventListener('click', () => { if (lbMode === 'client' && lbIndex >= 0) openNote(lbPhotos[lbIndex].id); });
+  $('#lb-dl').addEventListener('click', () => { if (lbIndex >= 0) downloadPhoto(lbPhotos[lbIndex]); });
   $('#lightbox').addEventListener('click', e => { if (e.target.id === 'lightbox') closeLb(); });
   $('#lb-img').addEventListener('click', () => lbStep(1));  // bấm ảnh để xem ảnh kế tiếp
   document.addEventListener('keydown', e => {
