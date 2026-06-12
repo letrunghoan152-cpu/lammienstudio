@@ -48,12 +48,11 @@
     try {
       const list = await apiListAlbums();
       apiSync = true;
-      if (list.length) {
-        albums = list;
-      } else if (albums.length) {
-        // máy chủ trống mà máy này có sẵn album cũ -> đẩy lên (di cư 1 lần)
-        albums.forEach(apiPushAlbum);
-      }
+      // Gộp 2 chiều: album máy chủ là nguồn chính; album chỉ có trên máy này thì đẩy lên (không bao giờ ghi đè mất dữ liệu)
+      const serverIds = new Set(list.map(a => a.id));
+      const localOnly = albums.filter(a => a.id && !serverIds.has(a.id));
+      localOnly.forEach(apiPushAlbum);
+      albums = list.concat(localOnly).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
       saveAlbumsLocal();
       return true;
     } catch (_) { return false; }
