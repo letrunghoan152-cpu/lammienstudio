@@ -501,12 +501,32 @@
   $('#clear-sel').addEventListener('click', () => { if (!cSel().length) return; if (!window.confirm('Bỏ chọn tất cả?')) return; clientAlbum.photos.forEach(p => p.selected = false); saveClient(); renderClient(); });
 
   /* ---------- Lightbox / trình xem ảnh ---------- */
-  let lbPhotos = [], lbMode = 'client';
+  let lbPhotos = [], lbMode = 'client', lbLoadToken = 0;
+  function showLbPhoto(p) {
+    const img = $('#lb-img'); const token = ++lbLoadToken;
+    img.alt = p.name || '';
+    // Hiện thumbnail (đã cache trong lưới) ngay lập tức → không giật
+    img.src = p.src || p.full;
+    // Rồi âm thầm nâng lên bản nét; chỉ áp dụng nếu vẫn đang xem ảnh này
+    if (p.full && p.full !== p.src) {
+      const hi = new Image();
+      hi.onload = () => { if (token === lbLoadToken) img.src = p.full; };
+      hi.src = p.full;
+    }
+  }
+  function preloadAround(i) {
+    if (!lbPhotos.length) return;
+    [i - 1, i + 1, i + 2].forEach(k => {
+      const q = lbPhotos[(k + lbPhotos.length) % lbPhotos.length];
+      if (q) { const im = new Image(); im.src = q.full || q.src; }
+    });
+  }
   function openLightbox(photos, i, mode) {
     lbPhotos = photos || []; lbMode = mode || 'client'; lbIndex = i;
     const p = lbPhotos[i]; if (!p) return;
-    $('#lb-img').src = p.full || p.src; $('#lb-img').alt = p.name || '';
+    showLbPhoto(p);
     $('#lb-name').textContent = `${p.name || ''}  ·  ${i + 1}/${lbPhotos.length}`;
+    preloadAround(i);
     const isClient = lbMode === 'client';
     $('#lb-toggle').hidden = !isClient;
     $('#lb-note-wrap').hidden = !(isClient && clientAlbum && clientAlbum.allowNotes);
