@@ -12,6 +12,52 @@
   const LOGIN_USER = 'lammien';
   const LOGIN_PASS = 'lammien';
   const FIXED_DRIVE_KEY = 'AIzaSyB30IdJg_FKZpi2oOmF8bS7qMEna5P2dpg';
+  const API_AUTH_KEY = 'lamMienApiAuth';
+
+  /* ---------- API (đồng bộ đa thiết bị) ---------- */
+  let apiAuth = null;          // {u, p} của nhân sự
+  let apiSync = false;         // true khi máy chủ hoạt động
+  try { apiAuth = JSON.parse(localStorage.getItem(API_AUTH_KEY) || 'null'); } catch (_) {}
+  function apiHeaders() {
+    const h = { 'Content-Type': 'application/json' };
+    if (apiAuth) { h['x-user'] = apiAuth.u; h['x-pass'] = apiAuth.p; }
+    return h;
+  }
+  async function apiListAlbums() {
+    const r = await fetch('/api/albums', { headers: apiHeaders() });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  }
+  function apiPushAlbum(al) {
+    if (!apiSync || !apiAuth || !al) return;
+    fetch('/api/albums', { method: 'POST', headers: apiHeaders(), body: JSON.stringify({ album: al }) })
+      .then(r => { if (!r.ok) console.warn('Sync album lỗi', r.status); })
+      .catch(() => {});
+  }
+  function apiDeleteAlbum(id) {
+    if (!apiSync || !apiAuth) return;
+    fetch('/api/albums?id=' + encodeURIComponent(id), { method: 'DELETE', headers: apiHeaders() }).catch(() => {});
+  }
+  async function apiGetAlbum(id) {
+    const r = await fetch('/api/album?id=' + encodeURIComponent(id));
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  }
+  async function refreshAlbumsFromServer() {
+    if (!apiAuth) return false;
+    try {
+      const list = await apiListAlbums();
+      apiSync = true;
+      if (list.length) {
+        albums = list;
+      } else if (albums.length) {
+        // máy chủ trống mà máy này có sẵn album cũ -> đẩy lên (di cư 1 lần)
+        albums.forEach(apiPushAlbum);
+      }
+      saveAlbumsLocal();
+      return true;
+    } catch (_) { return false; }
+  }
 
   const STATUSES = [
     { key: 'draft',     label: 'Bản nháp',          cls: 'st-draft',     color: '#94a3b8' },
@@ -31,9 +77,18 @@
   let currentSource = 'drive';
   let pickedFiles = [];
   // client picker
-  let clientAlbum = null, clientBound = false, clientFilter = 'all', lbIndex = -1;
-  let clientList = [], clientShown = 0, clientObserver = null;
+  let clientAlbum = null, clientBound = false, clientRemote = false, clientFilter = 'all', lbIndex = -1;
+  let clientList = [], clientShown = 0, clientObserver = null, guestSyncTimer = null;
   const CLIENT_BATCH = 30;
+  function pushGuestSelection(status) {
+    if (!clientRemote || !clientAlbum) return;
+    const review = {};
+    clientAlbum.photos.forEach(p => { review[p.id] = { r: p.review || '', n: p.note || '' }; });
+    fetch('/api/album?id=' + encodeURIComponent(clientAlbum.id), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ review, status: status || 'choosing' })
+    }).catch(() => {});
+  }
   // album detail (studio)
   let detailAlbum = null, detailSet = 'goc', pickingCover = false;
   let detailList = [], detailShown = 0, detailObserver = null;
@@ -78,7 +133,9 @@
   }
 
   /* ---------- Persistence ---------- */
-  function saveAlbums() { try { localStorage.setItem(ALBUMS_KEY, JSON.stringify(albums)); } catch (_) {} }
+  function saveAlbumsLocal() { try { localStorage.setItem(ALBUMS_KEY, JSON.stringify(albums)); } catch (_) {} }
+  // changed: album vừa sửa -> đồng bộ đúng album đó lên máy chủ
+  function saveAlbums(changed) { saveAlbumsLocal(); if (changed) apiPushAlbum(changed); }
   function loadAlbums() { try { const r = localStorage.getItem(ALBUMS_KEY); if (r) albums = JSON.parse(r) || []; } catch (_) { albums = []; } }
   function saveBrand() { try { localStorage.setItem(BRAND_KEY, JSON.stringify(brand)); } catch (_) {} }
   function loadBrand() { try { const r = localStorage.getItem(BRAND_KEY); if (r) brand = Object.assign(brand, JSON.parse(r)); } catch (_) {} }
@@ -91,17 +148,43 @@
     $('#login-view').hidden = true; $('#app').hidden = false; $('#client').hidden = true;
     renderAlbums();
     if ($('#page-albumdetail').classList.contains('active') && detailAlbum) renderDetail();
+    // làm mới ngầm từ máy chủ (để thấy lựa chọn khách vừa gửi)
+    refreshAlbumsFromServer().then(ok => { if (ok) { renderAlbums(); if (detailAlbum) { detailAlbum = albums.find(x => x.id === detailAlbum.id) || detailAlbum; if ($('#page-albumdetail').classList.contains('active')) renderDetail(); } } });
   }
-  $('#login-form').addEventListener('submit', e => {
+  $('#login-form').addEventListener('submit', async e => {
     e.preventDefault();
     const u = $('#lg-user').value.trim(), p = $('#lg-pass').value;
-    if (u === LOGIN_USER && p === LOGIN_PASS) {
-      try { localStorage.setItem(AUTH_KEY, '1'); } catch (_) {}
-      showApp(); toast('Đăng nhập thành công');
-    } else { toast('Sai tài khoản hoặc mật khẩu'); }
+    const btn = $('#login-form button[type="submit"]');
+    btn.disabled = true; btn.textContent = 'Đang đăng nhập…';
+    let viaApi = false;
+    try {
+      const r = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user: u, pass: p }) });
+      if (r.ok) {
+        const d = await r.json();
+        apiAuth = { u, p };
+        try { localStorage.setItem(API_AUTH_KEY, JSON.stringify(apiAuth)); } catch (_) {}
+        viaApi = true;
+        if (d.sync) { await refreshAlbumsFromServer(); }
+        else toast('Máy chủ chưa nối database — dữ liệu chỉ lưu trên máy này');
+      } else if (r.status === 401) {
+        btn.disabled = false; btn.textContent = 'Đăng nhập';
+        toast('Sai tài khoản hoặc mật khẩu'); return;
+      }
+    } catch (_) { /* API không chạy (mở file local) -> fallback */ }
+    if (!viaApi) {
+      if (u !== LOGIN_USER || p !== LOGIN_PASS) {
+        btn.disabled = false; btn.textContent = 'Đăng nhập';
+        toast('Sai tài khoản hoặc mật khẩu'); return;
+      }
+      toast('Chế độ offline — dữ liệu chỉ lưu trên máy này');
+    }
+    try { localStorage.setItem(AUTH_KEY, '1'); } catch (_) {}
+    btn.disabled = false; btn.textContent = 'Đăng nhập';
+    showApp(); if (viaApi && apiSync) toast('Đăng nhập thành công — dữ liệu đồng bộ mọi thiết bị');
   });
   $('#logout-btn').addEventListener('click', () => {
-    try { localStorage.removeItem(AUTH_KEY); } catch (_) {}
+    try { localStorage.removeItem(AUTH_KEY); localStorage.removeItem(API_AUTH_KEY); } catch (_) {}
+    apiAuth = null; apiSync = false;
     $('#lg-user').value = ''; $('#lg-pass').value = '';
     showLogin(); toast('Đã đăng xuất');
   });
@@ -213,7 +296,7 @@
       createdAt: Date.now(), lastActivity: Date.now(),
       photos
     };
-    albums.unshift(al); saveAlbums(); renderAlbums(); closeCreate();
+    albums.unshift(al); saveAlbums(al); renderAlbums(); closeCreate();
     toast(`Đã tạo album “${al.name}” (${photos.length} ảnh)`);
   });
 
@@ -298,7 +381,7 @@
     stMenu.innerHTML = STATUSES.map(s => `<button data-s="${s.key}"><span class="dot" style="background:${s.color}"></span>${s.label}</button>`).join('');
     stBtn.addEventListener('click', e => { e.stopPropagation(); closeMenus(); stMenu.hidden = false; });
     stMenu.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
-      al.status = b.dataset.s; al.lastActivity = Date.now(); saveAlbums(); renderAlbums();
+      al.status = b.dataset.s; al.lastActivity = Date.now(); saveAlbums(al); renderAlbums();
     }));
 
     // share
@@ -319,7 +402,7 @@
     });
     card.querySelector('[data-act="addfolder"]').addEventListener('click', () => toast('Tính năng thêm thư mục sẽ được bổ sung sau'));
     card.querySelector('[data-act="editmax"]').addEventListener('click', () => editMax(al));
-    card.querySelector('[data-act="download"]').addEventListener('change', e => { al.allowDownload = e.target.checked; al.lastActivity = Date.now(); saveAlbums(); });
+    card.querySelector('[data-act="download"]').addEventListener('change', e => { al.allowDownload = e.target.checked; al.lastActivity = Date.now(); saveAlbums(al); });
 
     // mở chi tiết album khi bấm ảnh bìa / tên
     card.querySelector('.acard-cover').addEventListener('click', () => openAlbumDetail(al.id));
@@ -335,18 +418,18 @@
     const name = window.prompt('Tên album:', al.name); if (name === null) return;
     const client = window.prompt('Tên khách (có thể để trống):', al.client || '');
     al.name = name.trim() || al.name; if (client !== null) al.client = client.trim();
-    al.lastActivity = Date.now(); saveAlbums(); renderAlbums(); toast('Đã cập nhật');
+    al.lastActivity = Date.now(); saveAlbums(al); renderAlbums(); toast('Đã cập nhật');
   }
   function editMax(al) {
     const v = window.prompt('Số ảnh tối đa khách được chọn (0 = không giới hạn):', al.maxCount || 0);
     if (v === null) return;
     const n = parseInt(v, 10); al.maxCount = Number.isFinite(n) && n > 0 ? n : 0;
-    saveAlbums(); renderAlbums();
+    saveAlbums(al); renderAlbums();
   }
   function deleteAlbum(id) {
     const a = albums.find(x => x.id === id);
     if (!window.confirm(`Xoá album “${a ? a.name : ''}”?`)) return;
-    albums = albums.filter(x => x.id !== id); saveAlbums(); renderAlbums(); toast('Đã xoá album');
+    albums = albums.filter(x => x.id !== id); saveAlbumsLocal(); apiDeleteAlbum(id); renderAlbums(); toast('Đã xoá album');
     if (detailAlbum && detailAlbum.id === id) { detailAlbum = null; gotoPage('page-albums'); }
   }
 
@@ -358,6 +441,14 @@
     $$('.sb-nav a').forEach(x => x.classList.toggle('active', x.dataset.page === 'albums'));
     gotoPage('page-albumdetail');
     renderDetail();
+    // lấy bản mới nhất từ máy chủ (cập nhật Ảnh chọn khách vừa gửi)
+    if (apiSync) {
+      apiGetAlbum(id).then(fresh => {
+        const idx = albums.findIndex(x => x.id === id);
+        if (idx >= 0) { albums[idx] = fresh; saveAlbumsLocal(); }
+        if (detailAlbum && detailAlbum.id === id) { detailAlbum = fresh; renderDetail(); }
+      }).catch(() => {});
+    }
   }
   function renderDetail() {
     const al = detailAlbum; if (!al) return;
@@ -408,7 +499,7 @@
     d.addEventListener('click', () => {
       if (pickingCover) {
         detailAlbum.cover = p.full || p.src; pickingCover = false; detailAlbum.lastActivity = Date.now();
-        saveAlbums(); renderDetail(); renderAlbums(); toast('Đã đặt làm ảnh bìa');
+        saveAlbums(detailAlbum); renderDetail(); renderAlbums(); toast('Đã đặt làm ảnh bìa');
       } else {
         openLightbox(detailList, idx, 'view');
       }
@@ -508,7 +599,7 @@
       const photos = await buildDrivePhotos(link.trim(), FIXED_DRIVE_KEY);
       detailAlbum.editedPhotos = photos; detailAlbum.editedSourceUrl = link.trim();
       if (detailAlbum.status === 'choosing' || detailAlbum.status === 'done') detailAlbum.status = 'editing';
-      detailAlbum.lastActivity = Date.now(); saveAlbums();
+      detailAlbum.lastActivity = Date.now(); saveAlbums(detailAlbum);
       detailSet = 'sua'; renderDetail(); renderAlbums();
       toast(`Đã thêm ${photos.length} ảnh sửa`);
     } catch (err) { toast('Lỗi: ' + (err.message || err)); }
@@ -528,7 +619,11 @@
     const payload = { aid: al.id, n: al.name, m: al.maxCount, an: al.allowNotes ? 1 : 0, dl: al.allowDownload ? 1 : 0, b: brand.name, w: brand.welcome, ci, p };
     return b64encode(JSON.stringify(payload));
   }
-  function albumLink(al) { return location.origin + location.pathname + '#a=' + encodeAlbum(al); }
+  function albumLink(al) {
+    // Có máy chủ -> link ngắn ?al=ID (mở được mọi thiết bị, lựa chọn đồng bộ về studio)
+    if (apiSync) return location.origin + location.pathname + '?al=' + encodeURIComponent(al.id);
+    return location.origin + location.pathname + '#a=' + encodeAlbum(al);
+  }
   function isLocalAlbum(al) { return al.photos.some(p => /^data:/.test(p.src)); }
 
   function openShare(al) {
@@ -560,6 +655,20 @@
     else window.prompt('Sao chép:', text);
   }
 
+  async function resolveSharedAlbum() {
+    // Link ngắn ?al=ID -> lấy album từ máy chủ (đồng bộ 2 chiều)
+    const q = new URLSearchParams(location.search).get('al');
+    if (q) {
+      try {
+        const data = await apiGetAlbum(q);
+        data.photos.forEach(p => { if (!p.review) p.review = p.selected ? 'selected' : ''; });
+        return { album: data, bound: false, remote: true };
+      } catch (_) {
+        return { error: 'Không tải được album — kiểm tra mạng hoặc link' };
+      }
+    }
+    return decodeSharedAlbum();
+  }
   function decodeSharedAlbum() {
     const m = location.hash.match(/[#&]a=([^&]+)/);
     if (!m) return null;
@@ -579,8 +688,8 @@
   }
 
   /* ---------- Client picker ---------- */
-  function openClient(al, bound) {
-    clientAlbum = al; clientBound = !!bound; clientFilter = 'all';
+  function openClient(al, bound, remote) {
+    clientAlbum = al; clientBound = !!bound; clientRemote = !!remote; clientFilter = 'all';
     $('#login-view').hidden = true; $('#app').hidden = true; $('#client').hidden = false;
     const brandName = al.brandName || brand.name;
     const welcome = al.welcome || brand.welcome || 'Chọn những khoảnh khắc bạn yêu thích';
@@ -610,8 +719,12 @@
   }
   function saveClient() {
     if (!clientAlbum) return;
-    if (clientBound) { clientAlbum.lastActivity = Date.now(); saveAlbums(); }
-    else { try { localStorage.setItem('lamMienGuest_' + clientAlbum.id, JSON.stringify(clientAlbum)); } catch (_) {} }
+    if (clientBound) { clientAlbum.lastActivity = Date.now(); saveAlbums(clientAlbum); return; }
+    try { localStorage.setItem('lamMienGuest_' + clientAlbum.id, JSON.stringify(clientAlbum)); } catch (_) {}
+    if (clientRemote) {
+      clearTimeout(guestSyncTimer);
+      guestSyncTimer = setTimeout(() => pushGuestSelection(), 900); // gom thay đổi rồi đẩy 1 lần
+    }
   }
   function cSel() { return clientAlbum ? clientAlbum.photos.filter(p => p.review === 'selected') : []; }
   function cCount(state) { return clientAlbum ? clientAlbum.photos.filter(p => p.review === state).length : 0; }
@@ -830,6 +943,7 @@
   $('#finish-btn').addEventListener('click', () => {
     const sel = cSel(); if (!sel.length) { toast('Bạn chưa chọn ảnh nào'); return; }
     if (clientBound) { clientAlbum.status = 'done'; saveClient(); }
+    else if (clientRemote) { clearTimeout(guestSyncTimer); pushGuestSelection('done'); toast('Đã gửi lựa chọn về studio 🎉'); }
     $('#sum-count').textContent = sel.length;
     $('#summary-list').innerHTML = sel.map((p, i) => `<div class="r"><span class="nm">${i + 1}. ${escapeHtml(p.name)}</span>${p.note ? `<span class="nt">${escapeHtml(p.note)}</span>` : ''}</div>`).join('');
     $('#summary-modal').classList.add('open');
@@ -912,21 +1026,30 @@
       </div>
       <select data-f="status">${STATUSES.map(s => `<option value="${s.key}"${s.key === al.status ? ' selected' : ''}>${s.label}</option>`).join('')}</select>
       <span class="deadline-badge ${bd.cls}"><span class="dot"></span>${bd.txt}</span>`;
-    row.querySelector('[data-f="shoot"]').addEventListener('change', e => { al.shootDate = e.target.value; recomputeDeadline(al); al.lastActivity = Date.now(); saveAlbums(); renderProgress(); });
-    row.querySelector('[data-f="days"]').addEventListener('change', e => { const n = parseInt(e.target.value, 10); al.deadlineDays = Number.isFinite(n) && n >= 0 ? n : 0; recomputeDeadline(al); al.lastActivity = Date.now(); saveAlbums(); renderProgress(); });
-    row.querySelector('[data-f="status"]').addEventListener('change', e => { al.status = e.target.value; al.lastActivity = Date.now(); saveAlbums(); renderProgress(); });
+    row.querySelector('[data-f="shoot"]').addEventListener('change', e => { al.shootDate = e.target.value; recomputeDeadline(al); al.lastActivity = Date.now(); saveAlbums(al); renderProgress(); });
+    row.querySelector('[data-f="days"]').addEventListener('change', e => { const n = parseInt(e.target.value, 10); al.deadlineDays = Number.isFinite(n) && n >= 0 ? n : 0; recomputeDeadline(al); al.lastActivity = Date.now(); saveAlbums(al); renderProgress(); });
+    row.querySelector('[data-f="status"]').addEventListener('change', e => { al.status = e.target.value; al.lastActivity = Date.now(); saveAlbums(al); renderProgress(); });
     return row;
   }
 
   /* ---------- Init ---------- */
-  loadAlbums(); loadBrand();
+  (async () => {
+    loadAlbums(); loadBrand();
+    if (apiAuth) apiSync = true; // đã từng đăng nhập qua API -> bật đồng bộ (xác thực lại ở lần fetch đầu)
 
-  const shared = decodeSharedAlbum();
-  if (shared) {
-    openClient(shared.album, shared.bound);
-  } else if (localStorage.getItem(AUTH_KEY) === '1') {
-    showApp();
-  } else {
-    showLogin();
-  }
+    const hasShareRef = new URLSearchParams(location.search).get('al') || location.hash.match(/[#&]a=/);
+    if (hasShareRef) {
+      const shared = await resolveSharedAlbum();
+      if (shared && shared.album) {
+        openClient(shared.album, shared.bound, shared.remote);
+      } else {
+        toast(shared && shared.error ? shared.error : 'Link không hợp lệ hoặc album đã bị xoá');
+        showLogin();
+      }
+    } else if (localStorage.getItem(AUTH_KEY) === '1') {
+      showApp();
+    } else {
+      showLogin();
+    }
+  })();
 })();
