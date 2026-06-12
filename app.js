@@ -539,7 +539,7 @@
     $('#client-cover').hidden = !cov;
     if (cov) {
       $('#client-cover-img').src = cov;
-      $('#client-cover-title').textContent = welcome;
+      $('#client-cover-title').textContent = al.name || welcome;   // mã KH
       $('#client-cover-sub').textContent = brandName;
     }
     // nút quay lại (chỉ khi xem trước từ dashboard)
