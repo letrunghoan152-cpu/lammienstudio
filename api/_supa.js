@@ -1,6 +1,7 @@
 // Helper dùng chung cho các serverless function — Supabase + xác thực nhân sự
-const BASE = process.env.SUPABASE_URL;
-const KEY = process.env.SUPABASE_SERVICE_KEY;
+// Làm sạch URL: bỏ khoảng trắng, dấu / cuối, hoặc /rest/v1 dán thừa
+const BASE = (process.env.SUPABASE_URL || '').trim().replace(/\/+$/, '').replace(/\/rest\/v1$/, '');
+const KEY = (process.env.SUPABASE_SERVICE_KEY || '').trim();
 const SHEET_ID = process.env.STAFF_SHEET_ID; // Google Sheet quản lý tài khoản nhân sự
 
 function configured() { return !!(BASE && KEY); }
