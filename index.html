@@ -100,12 +100,21 @@
         </div>
         <div id="deadline-banner"></div>
         <div class="section-card">
+          <div class="prog-tools">
+            <select id="pg-ftype">
+              <option value="shoot">Lọc theo ngày chụp</option>
+              <option value="selected">Lọc theo ngày chốt ảnh</option>
+            </select>
+            <input type="date" id="pg-fdate">
+            <button class="btn ghost sm" id="pg-fclear">Xoá lọc</button>
+          </div>
           <div class="prog-head">
             <span>Khách hàng / Album</span>
             <span>Ngày chụp</span>
             <span>Hạn trả (số ngày)</span>
             <span>Trạng thái</span>
             <span>Deadline</span>
+            <span></span>
           </div>
           <div id="progress-list"></div>
           <div class="empty" id="progress-empty" hidden>
@@ -138,7 +147,15 @@
             <div class="set-item" data-set="sua" role="button" tabindex="0"><span class="set-label">🎨 Ảnh sửa</span><span class="cnt" id="ad-sua-cnt">0</span><button class="set-dl" data-dl="sua" title="Tải về .zip"><svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg></button></div>
           </aside>
           <div class="detail-main">
-            <div class="detail-grid-head"><h2 id="ad-set-title">ẢNH GỐC</h2></div>
+            <div class="detail-grid-head">
+              <h2 id="ad-set-title">ẢNH GỐC</h2>
+              <span class="grow"></span>
+              <button class="btn ghost sm" id="ad-sort" title="Đổi chiều sắp xếp">A→Z</button>
+              <div class="seg mini" id="ad-view">
+                <button data-v="grid" class="active" title="Xem dạng lưới"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></button>
+                <button data-v="list" title="Xem dạng danh sách"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg></button>
+              </div>
+            </div>
             <div class="detail-grid" id="ad-grid"></div>
           </div>
         </div>
@@ -149,8 +166,7 @@
   <!-- ============== CLIENT PICKER (mở qua link chia sẻ) ============== -->
   <div id="client" hidden>
     <div class="client-top">
-      <svg class="logo" viewBox="0 0 52 52"><rect width="52" height="52" rx="14" fill="#7c5cfc"/><path d="M26 39s-11-6.5-11-14C15 20 18 16.5 22 16.5c1.9 0 3.6 1 4 2.6.4-1.6 2.1-2.6 4-2.6 4 0 7 3.5 7 8.5 0 7.5-11 14-11 14z" fill="#fff"/><circle cx="34.5" cy="18.5" r="2.4" fill="#fb6f92"/></svg>
-      <div><strong id="client-brand">Lam Miên Studio</strong><small>Trang chọn ảnh</small></div>
+      <div><strong id="client-brand">Lam Miên Studio</strong></div>
     </div>
     <div class="client-cover" id="client-cover" hidden>
       <img id="client-cover-img" alt="">
@@ -201,7 +217,7 @@
             <div class="field">
               <label for="deadline-days">Số ngày trả ảnh</label>
               <input id="deadline-days" type="number" min="0" step="1" placeholder="VD: 15">
-              <span class="hint">Hạn trả = ngày chụp + số ngày này.</span>
+              <span class="hint">Hạn trả = ngày khách bấm “Gửi hậu kỳ” + số ngày này.</span>
             </div>
             <div class="field">
               <label for="max-count">Số ảnh tối đa khách chọn <span class="opt">(tuỳ chọn)</span></label>

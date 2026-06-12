@@ -29,6 +29,15 @@ module.exports = async (req, res) => {
       }
       // Khách chỉ được phép đẩy trạng thái sang "đang chọn" / "chọn xong"
       if (status === 'choosing' || status === 'done') data.status = status;
+      // Khách chốt ảnh lần đầu -> ghi thời điểm + tính hạn trả (deadline = ngày chốt + số ngày)
+      if (status === 'done' && !data.selectedAt) {
+        data.selectedAt = Date.now();
+        if (data.deadlineDays) {
+          const d = new Date(data.selectedAt + 7 * 3600 * 1000); // múi giờ VN
+          d.setUTCDate(d.getUTCDate() + data.deadlineDays);
+          data.deadline = d.toISOString().slice(0, 10);
+        }
+      }
       data.lastActivity = Date.now();
       await supa(`albums?id=eq.${encodeURIComponent(id)}`, {
         method: 'PATCH',

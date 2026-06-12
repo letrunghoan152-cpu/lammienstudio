@@ -91,6 +91,7 @@
   // album detail (studio)
   let detailAlbum = null, detailSet = 'goc', pickingCover = false;
   let detailList = [], detailShown = 0, detailObserver = null;
+  let detailSort = 'az', detailView = 'grid';
   const DETAIL_BATCH = 60;
 
   /* ---------- Helpers ---------- */
@@ -113,7 +114,9 @@
     client = client.replace(/\s+/g, ' ').trim();
     return { shootDate, hour, client };
   }
-  function recomputeDeadline(al) { al.deadline = (al.shootDate && al.deadlineDays) ? addDays(al.shootDate, al.deadlineDays) : ''; }
+  function toYMD(ts) { const d = new Date(ts); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; }
+  // Deadline tính từ lúc khách bấm "Gửi hậu kỳ" (selectedAt), không phải từ ngày chụp
+  function recomputeDeadline(al) { al.deadline = (al.selectedAt && al.deadlineDays) ? addDays(toYMD(al.selectedAt), al.deadlineDays) : ''; }
   function albumCover(al) { return (al && al.cover) || (al && al.photos && al.photos[0] && (al.photos[0].full || al.photos[0].src)) || ''; }
   function fmtAgo(ts) {
     if (!ts) return 'vừa xong';
@@ -293,7 +296,8 @@
       shootDate: meta.shootDate,
       shootHour: meta.hour,
       deadlineDays,
-      deadline: meta.shootDate && deadlineDays ? addDays(meta.shootDate, deadlineDays) : '',
+      deadline: '',        // sẽ tự tính khi khách bấm "Gửi hậu kỳ"
+      selectedAt: 0,
       sourceUrl: folder,
       cover: '',
       editedPhotos: [],
@@ -480,8 +484,12 @@
     $('#ad-sua-cnt').textContent = editedPhotos.length;
     $$('#page-albumdetail .set-item').forEach(b => b.classList.toggle('active', b.dataset.set === detailSet));
 
-    detailList = detailSet === 'chon' ? selPhotos : detailSet === 'sua' ? editedPhotos : al.photos;
+    detailList = (detailSet === 'chon' ? selPhotos : detailSet === 'sua' ? editedPhotos : al.photos)
+      .slice().sort((a, b) => (detailSort === 'az' ? 1 : -1) * String(a.name).localeCompare(String(b.name), undefined, { numeric: true }));
     $('#ad-set-title').textContent = detailSet === 'chon' ? `ẢNH CHỌN (${selPhotos.length})` : detailSet === 'sua' ? `ẢNH SỬA (${editedPhotos.length})` : `ẢNH GỐC (${al.photos.length})`;
+    $('#ad-sort').textContent = detailSort === 'az' ? 'A→Z' : 'Z→A';
+    $$('#ad-view button').forEach(b => b.classList.toggle('active', b.dataset.v === detailView));
+    $('#ad-grid').classList.toggle('list-view', detailView === 'list');
     const grid = $('#ad-grid'); grid.innerHTML = '';
     if (!detailList.length) {
       grid.innerHTML = detailSet === 'chon'
@@ -510,11 +518,30 @@
     });
     return d;
   }
+  function buildDetailRow(p, idx) {
+    const ext = (String(p.name).split('.').pop() || 'IMG').toUpperCase().slice(0, 4);
+    const d = document.createElement('div');
+    d.className = 'drow' + (p.selected ? ' sel' : '');
+    d.innerHTML = `<img src="${escapeAttr(p.src)}" alt="" loading="lazy" decoding="async">
+      <span class="nm">${escapeHtml(p.name)}</span>
+      ${p.note ? '<span title="' + escapeAttr(p.note) + '">📝</span>' : ''}
+      ${p.selected ? '<span class="hrt">♥</span>' : ''}
+      <span class="ext">${escapeHtml(ext)}</span>`;
+    d.addEventListener('click', () => {
+      if (pickingCover) {
+        detailAlbum.cover = p.full || p.src; pickingCover = false; detailAlbum.lastActivity = Date.now();
+        saveAlbums(detailAlbum); renderDetail(); renderAlbums(); toast('Đã đặt làm ảnh bìa');
+      } else { openLightbox(detailList, idx, 'view'); }
+    });
+    return d;
+  }
   function appendDetailBatch() {
     const grid = $('#ad-grid');
     const frag = document.createDocumentFragment();
     const end = Math.min(detailShown + DETAIL_BATCH, detailList.length);
-    for (let i = detailShown; i < end; i++) frag.appendChild(buildDetailThumb(detailList[i], i));
+    for (let i = detailShown; i < end; i++) {
+      frag.appendChild(detailView === 'list' ? buildDetailRow(detailList[i], i) : buildDetailThumb(detailList[i], i));
+    }
     grid.appendChild(frag);
     detailShown = end;
   }
@@ -588,6 +615,8 @@
   }
   $('#ad-preview').addEventListener('click', () => { if (detailAlbum) openClient(detailAlbum, true); });
   $('#ad-share').addEventListener('click', () => { if (detailAlbum) openShare(detailAlbum); });
+  $('#ad-sort').addEventListener('click', () => { detailSort = detailSort === 'az' ? 'za' : 'az'; renderDetail(); });
+  $$('#ad-view button').forEach(b => b.addEventListener('click', () => { detailView = b.dataset.v; renderDetail(); }));
   $('#ad-change-cover').addEventListener('click', () => {
     if (!detailAlbum) return;
     pickingCover = !pickingCover;
@@ -866,12 +895,21 @@
     sel.forEach((p, i) => setTimeout(() => downloadPhoto(p), i * 900));
   });
 
-  /* ---------- Scroll to top ---------- */
+  /* ---------- Scroll to top + tự ẩn thanh công cụ ---------- */
   $('#scroll-top').addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+  let lastScrollY = 0;
   window.addEventListener('scroll', () => {
-    const st = $('#scroll-top'); if (!st) return;
-    st.classList.toggle('show', !$('#client').hidden && window.scrollY > 600);
-  });
+    const inClient = !$('#client').hidden;
+    const st = $('#scroll-top');
+    if (st) st.classList.toggle('show', inClient && window.scrollY > 600);
+    // lướt xuống -> ẩn thanh công cụ; vuốt lên -> hiện lại
+    if (inClient) {
+      const bar = $('#selbar'), y = window.scrollY;
+      if (y > lastScrollY + 8 && y > 260) bar.classList.add('hide');
+      else if (y < lastScrollY - 8 || y < 120) bar.classList.remove('hide');
+      lastScrollY = y;
+    }
+  }, { passive: true });
 
   /* ---------- Lightbox / trình xem ảnh ---------- */
   let lbPhotos = [], lbMode = 'client', lbLoadToken = 0;
@@ -946,8 +984,11 @@
   /* ---------- Finish / summary ---------- */
   $('#finish-btn').addEventListener('click', () => {
     const sel = cSel(); if (!sel.length) { toast('Bạn chưa chọn ảnh nào'); return; }
-    if (clientBound) { clientAlbum.status = 'done'; saveClient(); }
-    else if (clientRemote) { clearTimeout(guestSyncTimer); pushGuestSelection('done'); toast('Đã gửi lựa chọn về studio 🎉'); }
+    if (clientBound) {
+      clientAlbum.status = 'done';
+      if (!clientAlbum.selectedAt) { clientAlbum.selectedAt = Date.now(); recomputeDeadline(clientAlbum); }
+      saveClient();
+    } else if (clientRemote) { clearTimeout(guestSyncTimer); pushGuestSelection('done'); toast('Đã gửi lựa chọn về studio 🎉'); }
     $('#sum-count').textContent = sel.length;
     $('#summary-list').innerHTML = sel.map((p, i) => `<div class="r"><span class="nm">${i + 1}. ${escapeHtml(p.name)}</span>${p.note ? `<span class="nt">${escapeHtml(p.note)}</span>` : ''}</div>`).join('');
     $('#summary-modal').classList.add('open');
@@ -980,7 +1021,10 @@
   function deadlineBadge(al) {
     if (al.status === 'delivered') return { cls: 'dl-ok', txt: 'Đã bàn giao' };
     const dl = daysLeft(al.deadline);
-    if (dl === null) return { cls: 'dl-none', txt: 'Chưa đặt hạn' };
+    if (dl === null) {
+      if (al.deadlineDays && !al.selectedAt) return { cls: 'dl-none', txt: 'Chờ khách chốt ảnh' };
+      return { cls: 'dl-none', txt: 'Chưa đặt hạn' };
+    }
     if (dl < 0) return { cls: 'dl-over', txt: `Trễ ${-dl} ngày 🔥` };
     if (dl === 0) return { cls: 'dl-soon', txt: 'Hết hạn hôm nay' };
     if (dl <= 3) return { cls: 'dl-soon', txt: `Còn ${dl} ngày` };
@@ -989,6 +1033,14 @@
   function isOverdue(al) { const d = daysLeft(al.deadline); return al.status !== 'delivered' && d !== null && d < 0; }
   function isSoon(al) { const d = daysLeft(al.deadline); return al.status !== 'delivered' && d !== null && d >= 0 && d <= 3; }
 
+  function progFiltered() {
+    const fdate = $('#pg-fdate').value;
+    if (!fdate) return albums.slice();
+    const ftype = $('#pg-ftype').value;
+    return albums.filter(a => ftype === 'selected'
+      ? (a.selectedAt && toYMD(a.selectedAt) === fdate)
+      : (a.shootDate === fdate));
+  }
   function renderProgress() {
     const list = $('#progress-list'), empty = $('#progress-empty'), banner = $('#deadline-banner');
     list.innerHTML = '';
@@ -1005,7 +1057,7 @@
       banner.innerHTML = `<div class="banner ok"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg><span>Không có album nào trễ hạn. Tiến độ ổn định 👍</span></div>`;
     }
 
-    const sorted = albums.slice().sort((a, b) => {
+    const sorted = progFiltered().sort((a, b) => {
       const da = daysLeft(a.deadline), db = daysLeft(b.deadline);
       const ga = a.status === 'delivered' ? 3 : da === null ? 2 : 0;
       const gb = b.status === 'delivered' ? 3 : db === null ? 2 : 0;
@@ -1019,22 +1071,29 @@
   function buildProgRow(al) {
     const bd = deadlineBadge(al);
     const hourTxt = (al.shootHour != null) ? ` · ${al.shootHour}h` : '';
+    const chotTxt = al.selectedAt ? `chốt ${fmtVN(toYMD(al.selectedAt))}` : 'chưa chốt ảnh';
     const row = document.createElement('div');
     row.className = 'prog-row';
     row.innerHTML = `
-      <div class="who"><strong>${escapeHtml(al.name)}</strong><small>${al.client ? escapeHtml(al.client) : '—'}${hourTxt}</small></div>
+      <div class="who" title="Mở album"><strong>${escapeHtml(al.name)}</strong><small>${al.client ? escapeHtml(al.client) : '—'}${hourTxt} · ${chotTxt}</small></div>
       <input type="date" data-f="shoot" value="${escapeAttr(al.shootDate || '')}">
       <div class="dl-cell">
         <input type="number" min="0" step="1" data-f="days" value="${al.deadlineDays || ''}" placeholder="số ngày">
-        <small>${al.deadline ? '→ ' + fmtVN(al.deadline) : (al.shootDate ? 'nhập số ngày' : 'cần ngày chụp')}</small>
+        <small>${al.deadline ? '→ ' + fmtVN(al.deadline) : (al.selectedAt ? 'nhập số ngày' : 'tính khi khách gửi hậu kỳ')}</small>
       </div>
       <select data-f="status">${STATUSES.map(s => `<option value="${s.key}"${s.key === al.status ? ' selected' : ''}>${s.label}</option>`).join('')}</select>
-      <span class="deadline-badge ${bd.cls}"><span class="dot"></span>${bd.txt}</span>`;
-    row.querySelector('[data-f="shoot"]').addEventListener('change', e => { al.shootDate = e.target.value; recomputeDeadline(al); al.lastActivity = Date.now(); saveAlbums(al); renderProgress(); });
+      <span class="deadline-badge ${bd.cls}"><span class="dot"></span>${bd.txt}</span>
+      <button class="icon-btn" data-f="link" title="Copy link gửi khách"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg></button>`;
+    row.querySelector('.who').addEventListener('click', () => openAlbumDetail(al.id));
+    row.querySelector('[data-f="link"]').addEventListener('click', () => copyAlbumLink(al));
+    row.querySelector('[data-f="shoot"]').addEventListener('change', e => { al.shootDate = e.target.value; al.lastActivity = Date.now(); saveAlbums(al); renderProgress(); });
     row.querySelector('[data-f="days"]').addEventListener('change', e => { const n = parseInt(e.target.value, 10); al.deadlineDays = Number.isFinite(n) && n >= 0 ? n : 0; recomputeDeadline(al); al.lastActivity = Date.now(); saveAlbums(al); renderProgress(); });
     row.querySelector('[data-f="status"]').addEventListener('change', e => { al.status = e.target.value; al.lastActivity = Date.now(); saveAlbums(al); renderProgress(); });
     return row;
   }
+  $('#pg-ftype').addEventListener('change', renderProgress);
+  $('#pg-fdate').addEventListener('change', renderProgress);
+  $('#pg-fclear').addEventListener('click', () => { $('#pg-fdate').value = ''; renderProgress(); });
 
   /* ---------- Init ---------- */
   (async () => {
