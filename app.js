@@ -376,12 +376,12 @@
         : `<p class="sub" style="color:var(--muted)">Album chưa có ảnh.</p>`;
       return;
     }
-    list.forEach(p => {
+    list.forEach((p, idx) => {
       const ext = (String(p.name).split('.').pop() || 'IMG').toUpperCase().slice(0, 4);
       const d = document.createElement('div');
       d.className = 'dthumb' + (p.selected ? ' sel' : '');
       d.innerHTML = `<img src="${escapeAttr(p.src)}" alt="" loading="lazy"><span class="dtag">${escapeHtml(ext)}</span>${p.selected ? '<span class="dheart">♥</span>' : ''}`;
-      d.addEventListener('click', () => window.open(p.full || p.src, '_blank'));
+      d.addEventListener('click', () => openLightbox(list, idx, 'view'));
       grid.appendChild(d);
     });
   }
@@ -480,7 +480,7 @@
         <button class="pick"><svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-9.6-9.4C.7 7.7 3.4 4 7.1 4c2 0 3.6 1 4.9 2.7C13.3 5 14.9 4 16.9 4c3.7 0 6.4 3.7 4.7 7.6C19.5 16.4 12 21 12 21z"/></svg></button>
         <div class="cap"><span>${escapeHtml(p.name)}</span>${p.note ? '<span>📝</span>' : ''}</div>`;
       card.querySelector('.pick').addEventListener('click', ev => { ev.stopPropagation(); cToggle(p.id); });
-      card.querySelector('img').addEventListener('click', () => openLightbox(i));
+      card.querySelector('img').addEventListener('click', () => openLightbox(clientAlbum.photos, i, 'client'));
       grid.appendChild(card);
     });
     updateClientUI();
@@ -500,23 +500,37 @@
   $$('.chips .chip').forEach(c => c.addEventListener('click', () => { clientFilter = c.dataset.filter; $$('.chips .chip').forEach(x => x.classList.toggle('active', x === c)); renderClient(); }));
   $('#clear-sel').addEventListener('click', () => { if (!cSel().length) return; if (!window.confirm('Bỏ chọn tất cả?')) return; clientAlbum.photos.forEach(p => p.selected = false); saveClient(); renderClient(); });
 
-  /* ---------- Lightbox ---------- */
-  function openLightbox(i) {
-    lbIndex = i; const p = clientAlbum.photos[i]; if (!p) return;
-    $('#lb-img').src = p.full || p.src; $('#lb-img').alt = p.name; $('#lb-name').textContent = p.name;
-    $('#lb-note-wrap').hidden = !clientAlbum.allowNotes; $('#lb-note').value = p.note || '';
-    syncLb(); $('#lightbox').classList.add('open');
+  /* ---------- Lightbox / trình xem ảnh ---------- */
+  let lbPhotos = [], lbMode = 'client';
+  function openLightbox(photos, i, mode) {
+    lbPhotos = photos || []; lbMode = mode || 'client'; lbIndex = i;
+    const p = lbPhotos[i]; if (!p) return;
+    $('#lb-img').src = p.full || p.src; $('#lb-img').alt = p.name || '';
+    $('#lb-name').textContent = `${p.name || ''}  ·  ${i + 1}/${lbPhotos.length}`;
+    const isClient = lbMode === 'client';
+    $('#lb-toggle').hidden = !isClient;
+    $('#lb-note-wrap').hidden = !(isClient && clientAlbum && clientAlbum.allowNotes);
+    if (isClient) { $('#lb-note').value = p.note || ''; syncLb(); }
+    $('#lightbox').classList.add('open');
   }
   function closeLb() { $('#lightbox').classList.remove('open'); lbIndex = -1; }
-  function lbStep(d) { if (lbIndex < 0) return; openLightbox((lbIndex + d + clientAlbum.photos.length) % clientAlbum.photos.length); }
-  function syncLb() { const p = clientAlbum.photos[lbIndex]; if (!p) return; const b = $('#lb-toggle'); b.textContent = p.selected ? '♥ Bỏ chọn' : '♡ Chọn ảnh này'; b.classList.toggle('primary', !p.selected); }
+  function lbStep(d) { if (lbIndex < 0 || !lbPhotos.length) return; openLightbox(lbPhotos, (lbIndex + d + lbPhotos.length) % lbPhotos.length, lbMode); }
+  function syncLb() { const p = lbPhotos[lbIndex]; if (!p) return; const b = $('#lb-toggle'); b.textContent = p.selected ? '♥ Bỏ chọn' : '♡ Chọn ảnh này'; b.classList.toggle('primary', !p.selected); }
   $('#lb-close').addEventListener('click', closeLb);
   $('#lb-prev').addEventListener('click', () => lbStep(-1));
   $('#lb-next').addEventListener('click', () => lbStep(1));
-  $('#lb-toggle').addEventListener('click', () => { if (lbIndex >= 0) cToggle(clientAlbum.photos[lbIndex].id); });
-  $('#lb-note').addEventListener('input', e => { const p = clientAlbum.photos[lbIndex]; if (p) { p.note = e.target.value; saveClient(); } });
+  $('#lb-toggle').addEventListener('click', () => { if (lbMode === 'client' && lbIndex >= 0) cToggle(lbPhotos[lbIndex].id); });
+  $('#lb-note').addEventListener('input', e => { const p = lbPhotos[lbIndex]; if (p) { p.note = e.target.value; saveClient(); } });
   $('#lightbox').addEventListener('click', e => { if (e.target.id === 'lightbox') closeLb(); });
-  document.addEventListener('keydown', e => { if (!$('#lightbox').classList.contains('open')) return; if (e.key === 'Escape') closeLb(); if (e.key === 'ArrowLeft') lbStep(-1); if (e.key === 'ArrowRight') lbStep(1); });
+  $('#lb-img').addEventListener('click', () => lbStep(1));  // bấm ảnh để xem ảnh kế tiếp
+  document.addEventListener('keydown', e => {
+    if (!$('#lightbox').classList.contains('open')) return;
+    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return; // đang gõ ghi chú
+    if (e.key === 'Escape') closeLb();
+    else if (e.key === 'ArrowLeft') lbStep(-1);
+    else if (e.key === 'ArrowRight') lbStep(1);
+    else if (e.key === ' ' || e.code === 'Space') { e.preventDefault(); lbStep(1); }
+  });
 
   /* ---------- Finish / summary ---------- */
   $('#finish-btn').addEventListener('click', () => {
