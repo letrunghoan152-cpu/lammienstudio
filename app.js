@@ -32,8 +32,12 @@
   let pickedFiles = [];
   // client picker
   let clientAlbum = null, clientBound = false, clientFilter = 'all', lbIndex = -1;
+  let clientList = [], clientShown = 0, clientObserver = null;
+  const CLIENT_BATCH = 30;
   // album detail (studio)
   let detailAlbum = null, detailSet = 'goc', pickingCover = false;
+  let detailList = [], detailShown = 0, detailObserver = null;
+  const DETAIL_BATCH = 60;
 
   /* ---------- Helpers ---------- */
   function genId() { return 'al' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
@@ -126,7 +130,8 @@
     const m = String(u).match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || String(u).match(/[?&]id=([a-zA-Z0-9_-]+)/) || String(u).match(/\/d\/([a-zA-Z0-9_-]+)/);
     return m ? m[1] : '';
   }
-  const driveThumb = (id, sz) => `https://drive.google.com/thumbnail?id=${id}&sz=${sz || 'w1000'}`;
+  const driveThumb = (id, sz) => `https://drive.google.com/thumbnail?id=${id}&sz=${sz || 'w400'}`;
+  function driveIdFromThumb(u) { const m = String(u).match(/[?&]id=([a-zA-Z0-9_-]+)/) || String(u).match(/\/d\/([a-zA-Z0-9_-]+)/); return m ? m[1] : ''; }
   async function listDriveFolder(folderId, apiKey) {
     let files = [], pageToken = '';
     do {
@@ -153,7 +158,7 @@
     if (!apiKey) throw new Error('Chưa nhập Google Drive API Key (mục “Tài khoản NAS”).');
     const files = await listDriveFolder(fid, apiKey);
     if (!files.length) throw new Error('Thư mục trống hoặc chưa chia sẻ “Bất kỳ ai có đường liên kết”.');
-    return files.map((f, i) => ({ id: 'd' + i, name: f.name, src: driveThumb(f.id, 'w800'), full: driveThumb(f.id, 'w1920'), selected: false, note: '' }));
+    return files.map((f, i) => ({ id: 'd' + i, name: f.name, driveId: f.id, src: driveThumb(f.id, 'w400'), full: driveThumb(f.id, 'w1600'), selected: false, note: '' }));
   }
   const DEMO = ['photo-1519741497674-611481863552','photo-1520854221256-17451cc331bf','photo-1511285560929-80b456fea0bc','photo-1519225421980-715cb0215aed','photo-1465495976277-4387d4b0b4c6','photo-1525258946800-98cfd641d0de','photo-1606216794074-735e91aa2c92','photo-1583939003579-730e3918a45a','photo-1591604466107-ec97de577aff','photo-1537633552985-df8429e8048b']
     .map((id, i) => ({ name: `LMS_${String(i + 1).padStart(4, '0')}.jpg`, src: `https://images.unsplash.com/${id}?auto=format&fit=crop&w=600&q=75` }));
@@ -380,10 +385,10 @@
     $('#ad-sua-cnt').textContent = editedPhotos.length;
     $$('#page-albumdetail .set-item').forEach(b => b.classList.toggle('active', b.dataset.set === detailSet));
 
-    const list = detailSet === 'chon' ? selPhotos : detailSet === 'sua' ? editedPhotos : al.photos;
+    detailList = detailSet === 'chon' ? selPhotos : detailSet === 'sua' ? editedPhotos : al.photos;
     $('#ad-set-title').textContent = detailSet === 'chon' ? `ẢNH CHỌN (${selPhotos.length})` : detailSet === 'sua' ? `ẢNH SỬA (${editedPhotos.length})` : `ẢNH GỐC (${al.photos.length})`;
     const grid = $('#ad-grid'); grid.innerHTML = '';
-    if (!list.length) {
+    if (!detailList.length) {
       grid.innerHTML = detailSet === 'chon'
         ? `<p class="sub" style="color:var(--muted)">Khách chưa chọn ảnh nào. Khi khách chọn, ảnh sẽ tự xuất hiện ở đây.</p>`
         : detailSet === 'sua'
@@ -391,21 +396,43 @@
         : `<p class="sub" style="color:var(--muted)">Album chưa có ảnh.</p>`;
       return;
     }
-    list.forEach((p, idx) => {
-      const ext = (String(p.name).split('.').pop() || 'IMG').toUpperCase().slice(0, 4);
-      const d = document.createElement('div');
-      d.className = 'dthumb' + (p.selected ? ' sel' : '') + (pickingCover ? ' picking' : '');
-      d.innerHTML = `<img src="${escapeAttr(p.src)}" alt="" loading="lazy"><span class="dtag">${escapeHtml(ext)}</span>${p.selected ? '<span class="dheart">♥</span>' : ''}`;
-      d.addEventListener('click', () => {
-        if (pickingCover) {
-          al.cover = p.full || p.src; pickingCover = false; al.lastActivity = Date.now();
-          saveAlbums(); renderDetail(); renderAlbums(); toast('Đã đặt làm ảnh bìa');
-        } else {
-          openLightbox(list, idx, 'view');
-        }
-      });
-      grid.appendChild(d);
+    detailShown = 0;
+    appendDetailBatch();
+    setupDetailSentinel();
+  }
+  function buildDetailThumb(p, idx) {
+    const ext = (String(p.name).split('.').pop() || 'IMG').toUpperCase().slice(0, 4);
+    const d = document.createElement('div');
+    d.className = 'dthumb' + (p.selected ? ' sel' : '') + (pickingCover ? ' picking' : '');
+    d.innerHTML = `<img src="${escapeAttr(p.src)}" alt="" loading="lazy" decoding="async"><span class="dtag">${escapeHtml(ext)}</span>${p.selected ? '<span class="dheart">♥</span>' : ''}`;
+    d.addEventListener('click', () => {
+      if (pickingCover) {
+        detailAlbum.cover = p.full || p.src; pickingCover = false; detailAlbum.lastActivity = Date.now();
+        saveAlbums(); renderDetail(); renderAlbums(); toast('Đã đặt làm ảnh bìa');
+      } else {
+        openLightbox(detailList, idx, 'view');
+      }
     });
+    return d;
+  }
+  function appendDetailBatch() {
+    const grid = $('#ad-grid');
+    const frag = document.createDocumentFragment();
+    const end = Math.min(detailShown + DETAIL_BATCH, detailList.length);
+    for (let i = detailShown; i < end; i++) frag.appendChild(buildDetailThumb(detailList[i], i));
+    grid.appendChild(frag);
+    detailShown = end;
+  }
+  function setupDetailSentinel() {
+    if (detailObserver) { detailObserver.disconnect(); detailObserver = null; }
+    let s = $('#ad-sentinel'); if (s) s.remove();
+    if (detailShown >= detailList.length) return;
+    s = document.createElement('div'); s.id = 'ad-sentinel'; s.style.cssText = 'height:1px;grid-column:1/-1';
+    $('#ad-grid').appendChild(s);
+    detailObserver = new IntersectionObserver(entries => {
+      if (entries.some(e => e.isIntersecting)) { s.remove(); appendDetailBatch(); setupDetailSentinel(); }
+    }, { rootMargin: '800px' });
+    detailObserver.observe(s);
   }
   $('#ad-back').addEventListener('click', () => { pickingCover = false; gotoPage('page-albums'); renderAlbums(); });
   $$('#page-albumdetail .set-item').forEach(b => b.addEventListener('click', () => { detailSet = b.dataset.set; renderDetail(); }));
@@ -437,8 +464,13 @@
   function b64decode(s) { return decodeURIComponent(escape(atob(s))); }
   function strHash(s) { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return 'g' + (h >>> 0).toString(36); }
   function encodeAlbum(al) {
-    const payload = { n: al.name, m: al.maxCount, an: al.allowNotes ? 1 : 0, dl: al.allowDownload ? 1 : 0, b: brand.name, w: brand.welcome, c: albumCover(al),
-      p: al.photos.map(p => (p.full && p.full !== p.src) ? [p.name, p.src, p.full] : [p.name, p.src]) };
+    const p = al.photos.map(ph => {
+      const did = ph.driveId || driveIdFromThumb(ph.src);
+      return did ? [ph.name, did] : [ph.name, ph.src, ph.full || ph.src, 1];  // [name,id] cho Drive; [name,src,full,1] cho URL thường
+    });
+    let ci = 0;
+    if (al.cover) { const idx = al.photos.findIndex(x => (x.full || x.src) === al.cover); if (idx >= 0) ci = idx; }
+    const payload = { n: al.name, m: al.maxCount, an: al.allowNotes ? 1 : 0, dl: al.allowDownload ? 1 : 0, b: brand.name, w: brand.welcome, ci, p };
     return b64encode(JSON.stringify(payload));
   }
   function albumLink(al) { return location.origin + location.pathname + '#a=' + encodeAlbum(al); }
@@ -478,8 +510,13 @@
     if (!m) return null;
     let payload; try { payload = JSON.parse(b64decode(m[1])); } catch (_) { return null; }
     const id = strHash(m[1]);
-    let al = { id, name: payload.n || 'Album', maxCount: payload.m || 0, allowNotes: !!payload.an, allowDownload: !!payload.dl, brandName: payload.b || 'Lam Miên Studio', welcome: payload.w || '', cover: payload.c || '',
-      photos: (payload.p || []).map((row, i) => ({ id: 'g' + i, name: row[0] || `anh_${i + 1}`, src: row[1], full: row[2] || row[1], selected: false, note: '' })) };
+    const photos = (payload.p || []).map((row, i) => {
+      if (row.length === 2) { const did = row[1]; return { id: 'g' + i, name: row[0] || `anh_${i + 1}`, driveId: did, src: driveThumb(did, 'w400'), full: driveThumb(did, 'w1600'), selected: false, note: '' }; }
+      return { id: 'g' + i, name: row[0] || `anh_${i + 1}`, src: row[1], full: row[2] || row[1], selected: false, note: '' };
+    });
+    const cidx = payload.ci || 0;
+    const cover = photos[cidx] ? (photos[cidx].full || photos[cidx].src) : (payload.c || '');
+    let al = { id, name: payload.n || 'Album', maxCount: payload.m || 0, allowNotes: !!payload.an, allowDownload: !!payload.dl, brandName: payload.b || 'Lam Miên Studio', welcome: payload.w || '', cover, photos };
     try { const saved = localStorage.getItem('lamMienGuest_' + id); if (saved) { const s = JSON.parse(saved); if (s && s.photos && s.photos.length) al = s; } } catch (_) {}
     return al;
   }
@@ -517,30 +554,62 @@
   }
   function cSel() { return clientAlbum ? clientAlbum.photos.filter(p => p.selected) : []; }
 
+  const HEART_SVG = '<svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-9.6-9.4C.7 7.7 3.4 4 7.1 4c2 0 3.6 1 4.9 2.7C13.3 5 14.9 4 16.9 4c3.7 0 6.4 3.7 4.7 7.6C19.5 16.4 12 21 12 21z"/></svg>';
+  function buildPhotoCard(p) {
+    const card = document.createElement('div');
+    card.className = 'pcard' + (p.selected ? ' sel' : '');
+    card.dataset.id = p.id;
+    card.innerHTML = `<img src="${escapeAttr(p.src)}" alt="${escapeAttr(p.name)}" loading="lazy" decoding="async">
+      <button class="pick">${HEART_SVG}</button>
+      <div class="cap"><span>${escapeHtml(p.name)}</span>${p.note ? '<span>📝</span>' : ''}</div>`;
+    card.querySelector('.pick').addEventListener('click', ev => { ev.stopPropagation(); cToggle(p.id); });
+    card.querySelector('img').addEventListener('click', () => openLightbox(clientAlbum.photos, clientAlbum.photos.indexOf(p), 'client'));
+    return card;
+  }
+  function appendClientBatch() {
+    const grid = $('#photo-grid');
+    const frag = document.createDocumentFragment();
+    const end = Math.min(clientShown + CLIENT_BATCH, clientList.length);
+    for (let i = clientShown; i < end; i++) frag.appendChild(buildPhotoCard(clientList[i]));
+    grid.appendChild(frag);
+    clientShown = end;
+  }
+  function setupClientSentinel() {
+    if (clientObserver) { clientObserver.disconnect(); clientObserver = null; }
+    let sentinel = $('#client-sentinel');
+    if (sentinel) sentinel.remove();
+    if (clientShown >= clientList.length) return;
+    sentinel = document.createElement('div');
+    sentinel.id = 'client-sentinel';
+    sentinel.style.cssText = 'height:1px;grid-column:1/-1';
+    $('#photo-grid').appendChild(sentinel);
+    clientObserver = new IntersectionObserver(entries => {
+      if (entries.some(e => e.isIntersecting)) {
+        sentinel.remove();
+        appendClientBatch();
+        setupClientSentinel();
+      }
+    }, { rootMargin: '800px' });
+    clientObserver.observe(sentinel);
+  }
   function renderClient() {
     const grid = $('#photo-grid'); grid.innerHTML = '';
     if (!clientAlbum) return;
-    clientAlbum.photos.forEach((p, i) => {
-      const show = clientFilter === 'all' || (clientFilter === 'selected' && p.selected) || (clientFilter === 'unselected' && !p.selected);
-      if (!show) return;
-      const order = p.selected ? clientAlbum.photos.filter((x, j) => x.selected && j <= i).length : '';
-      const card = document.createElement('div');
-      card.className = 'pcard' + (p.selected ? ' sel' : '');
-      card.innerHTML = `
-        ${p.selected ? `<span class="num">${order}</span>` : ''}
-        <img src="${escapeAttr(p.src)}" alt="${escapeAttr(p.name)}" loading="lazy">
-        <button class="pick"><svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-9.6-9.4C.7 7.7 3.4 4 7.1 4c2 0 3.6 1 4.9 2.7C13.3 5 14.9 4 16.9 4c3.7 0 6.4 3.7 4.7 7.6C19.5 16.4 12 21 12 21z"/></svg></button>
-        <div class="cap"><span>${escapeHtml(p.name)}</span>${p.note ? '<span>📝</span>' : ''}</div>`;
-      card.querySelector('.pick').addEventListener('click', ev => { ev.stopPropagation(); cToggle(p.id); });
-      card.querySelector('img').addEventListener('click', () => openLightbox(clientAlbum.photos, i, 'client'));
-      grid.appendChild(card);
-    });
+    clientList = clientAlbum.photos.filter(p => clientFilter === 'all' || (clientFilter === 'selected' && p.selected) || (clientFilter === 'unselected' && !p.selected));
+    clientShown = 0;
+    appendClientBatch();      // vẽ lô đầu ngay
+    setupClientSentinel();    // các lô sau nạp khi cuộn tới
     updateClientUI();
   }
   function cToggle(id) {
     const p = clientAlbum.photos.find(x => x.id === id); if (!p) return;
     if (!p.selected && clientAlbum.maxCount && cSel().length >= clientAlbum.maxCount) { toast(`Chỉ được chọn tối đa ${clientAlbum.maxCount} ảnh`); return; }
-    p.selected = !p.selected; saveClient(); renderClient(); if (lbIndex >= 0) syncLb();
+    p.selected = !p.selected; saveClient();
+    const card = $('#photo-grid').querySelector(`.pcard[data-id="${p.id}"]`);
+    if (card) card.classList.toggle('sel', p.selected);
+    updateClientUI();
+    if (lbIndex >= 0) syncLb();
+    if (clientFilter !== 'all') renderClient();   // đang lọc thì cập nhật lại danh sách hiển thị
   }
   function updateClientUI() {
     const n = cSel().length;
