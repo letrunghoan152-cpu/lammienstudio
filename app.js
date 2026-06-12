@@ -33,7 +33,7 @@
   // client picker
   let clientAlbum = null, clientBound = false, clientFilter = 'all', lbIndex = -1;
   // album detail (studio)
-  let detailAlbum = null, detailSet = 'goc';
+  let detailAlbum = null, detailSet = 'goc', pickingCover = false;
 
   /* ---------- Helpers ---------- */
   function genId() { return 'al' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
@@ -56,6 +56,7 @@
     return { shootDate, hour, client };
   }
   function recomputeDeadline(al) { al.deadline = (al.shootDate && al.deadlineDays) ? addDays(al.shootDate, al.deadlineDays) : ''; }
+  function albumCover(al) { return (al && al.cover) || (al && al.photos && al.photos[0] && (al.photos[0].full || al.photos[0].src)) || ''; }
   function fmtAgo(ts) {
     if (!ts) return 'vừa xong';
     const s = Math.floor((Date.now() - ts) / 1000);
@@ -202,6 +203,8 @@
       deadlineDays,
       deadline: meta.shootDate && deadlineDays ? addDays(meta.shootDate, deadlineDays) : '',
       sourceUrl: folder,
+      cover: '',
+      editedPhotos: [],
       createdAt: Date.now(), lastActivity: Date.now(),
       photos
     };
@@ -346,7 +349,7 @@
   function gotoPage(id) { $$('.page').forEach(p => p.classList.toggle('active', p.id === id)); window.scrollTo({ top: 0 }); }
   function openAlbumDetail(id) {
     const al = albums.find(x => x.id === id); if (!al) return;
-    detailAlbum = al; detailSet = 'goc';
+    detailAlbum = al; detailSet = 'goc'; pickingCover = false;
     $$('.sb-nav a').forEach(x => x.classList.toggle('active', x.dataset.page === 'albums'));
     gotoPage('page-albumdetail');
     renderDetail();
@@ -362,40 +365,79 @@
     const st = statusOf(al.status);
     const stEl = $('#ad-status'); stEl.className = 'status-pill ' + st.cls; stEl.innerHTML = `<span class="dot"></span>${st.label}`;
 
+    // ảnh bìa
+    const cov = albumCover(al);
+    $('#ad-cover').src = cov || '';
+    $('#ad-change-cover').classList.toggle('show', pickingCover);
+    $('#ad-change-cover').innerHTML = pickingCover
+      ? '<svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>Bấm 1 ảnh để đặt làm bìa'
+      : '<svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>Đổi ảnh bìa';
+
     const selPhotos = al.photos.filter(p => p.selected);
+    const editedPhotos = al.editedPhotos || [];
     $('#ad-goc-cnt').textContent = al.photos.length;
     $('#ad-chon-cnt').textContent = selPhotos.length;
+    $('#ad-sua-cnt').textContent = editedPhotos.length;
     $$('#page-albumdetail .set-item').forEach(b => b.classList.toggle('active', b.dataset.set === detailSet));
 
-    const list = detailSet === 'chon' ? selPhotos : al.photos;
-    $('#ad-set-title').textContent = detailSet === 'chon' ? `ẢNH CHỌN (${selPhotos.length})` : `ẢNH GỐC (${al.photos.length})`;
+    const list = detailSet === 'chon' ? selPhotos : detailSet === 'sua' ? editedPhotos : al.photos;
+    $('#ad-set-title').textContent = detailSet === 'chon' ? `ẢNH CHỌN (${selPhotos.length})` : detailSet === 'sua' ? `ẢNH SỬA (${editedPhotos.length})` : `ẢNH GỐC (${al.photos.length})`;
     const grid = $('#ad-grid'); grid.innerHTML = '';
     if (!list.length) {
       grid.innerHTML = detailSet === 'chon'
         ? `<p class="sub" style="color:var(--muted)">Khách chưa chọn ảnh nào. Khi khách chọn, ảnh sẽ tự xuất hiện ở đây.</p>`
+        : detailSet === 'sua'
+        ? `<p class="sub" style="color:var(--muted)">Chưa có ảnh sửa. Bấm “+ Ảnh sửa” để thêm thư mục ảnh đã chỉnh.</p>`
         : `<p class="sub" style="color:var(--muted)">Album chưa có ảnh.</p>`;
       return;
     }
     list.forEach((p, idx) => {
       const ext = (String(p.name).split('.').pop() || 'IMG').toUpperCase().slice(0, 4);
       const d = document.createElement('div');
-      d.className = 'dthumb' + (p.selected ? ' sel' : '');
+      d.className = 'dthumb' + (p.selected ? ' sel' : '') + (pickingCover ? ' picking' : '');
       d.innerHTML = `<img src="${escapeAttr(p.src)}" alt="" loading="lazy"><span class="dtag">${escapeHtml(ext)}</span>${p.selected ? '<span class="dheart">♥</span>' : ''}`;
-      d.addEventListener('click', () => openLightbox(list, idx, 'view'));
+      d.addEventListener('click', () => {
+        if (pickingCover) {
+          al.cover = p.full || p.src; pickingCover = false; al.lastActivity = Date.now();
+          saveAlbums(); renderDetail(); renderAlbums(); toast('Đã đặt làm ảnh bìa');
+        } else {
+          openLightbox(list, idx, 'view');
+        }
+      });
       grid.appendChild(d);
     });
   }
-  $('#ad-back').addEventListener('click', () => { gotoPage('page-albums'); renderAlbums(); });
+  $('#ad-back').addEventListener('click', () => { pickingCover = false; gotoPage('page-albums'); renderAlbums(); });
   $$('#page-albumdetail .set-item').forEach(b => b.addEventListener('click', () => { detailSet = b.dataset.set; renderDetail(); }));
   $('#ad-preview').addEventListener('click', () => { if (detailAlbum) openClient(detailAlbum, true); });
   $('#ad-share').addEventListener('click', () => { if (detailAlbum) openShare(detailAlbum); });
+  $('#ad-change-cover').addEventListener('click', () => {
+    if (!detailAlbum) return;
+    pickingCover = !pickingCover;
+    if (pickingCover) { detailSet = 'goc'; toast('Bấm vào 1 ảnh để đặt làm bìa'); }
+    renderDetail();
+  });
+  $('#ad-add-edited').addEventListener('click', async () => {
+    if (!detailAlbum) return;
+    const link = window.prompt('Dán link thư mục Google Drive chứa ảnh đã sửa:');
+    if (!link || !link.trim()) return;
+    toast('Đang tải ảnh đã sửa…');
+    try {
+      const photos = await buildDrivePhotos(link.trim(), FIXED_DRIVE_KEY);
+      detailAlbum.editedPhotos = photos; detailAlbum.editedSourceUrl = link.trim();
+      if (detailAlbum.status === 'choosing' || detailAlbum.status === 'done') detailAlbum.status = 'editing';
+      detailAlbum.lastActivity = Date.now(); saveAlbums();
+      detailSet = 'sua'; renderDetail(); renderAlbums();
+      toast(`Đã thêm ${photos.length} ảnh sửa`);
+    } catch (err) { toast('Lỗi: ' + (err.message || err)); }
+  });
 
   /* ---------- Share link ---------- */
   function b64encode(s) { return btoa(unescape(encodeURIComponent(s))); }
   function b64decode(s) { return decodeURIComponent(escape(atob(s))); }
   function strHash(s) { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return 'g' + (h >>> 0).toString(36); }
   function encodeAlbum(al) {
-    const payload = { n: al.name, m: al.maxCount, an: al.allowNotes ? 1 : 0, dl: al.allowDownload ? 1 : 0, b: brand.name,
+    const payload = { n: al.name, m: al.maxCount, an: al.allowNotes ? 1 : 0, dl: al.allowDownload ? 1 : 0, b: brand.name, w: brand.welcome, c: albumCover(al),
       p: al.photos.map(p => (p.full && p.full !== p.src) ? [p.name, p.src, p.full] : [p.name, p.src]) };
     return b64encode(JSON.stringify(payload));
   }
@@ -436,7 +478,7 @@
     if (!m) return null;
     let payload; try { payload = JSON.parse(b64decode(m[1])); } catch (_) { return null; }
     const id = strHash(m[1]);
-    let al = { id, name: payload.n || 'Album', maxCount: payload.m || 0, allowNotes: !!payload.an, allowDownload: !!payload.dl, brandName: payload.b || 'Lam Miên Studio',
+    let al = { id, name: payload.n || 'Album', maxCount: payload.m || 0, allowNotes: !!payload.an, allowDownload: !!payload.dl, brandName: payload.b || 'Lam Miên Studio', welcome: payload.w || '', cover: payload.c || '',
       photos: (payload.p || []).map((row, i) => ({ id: 'g' + i, name: row[0] || `anh_${i + 1}`, src: row[1], full: row[2] || row[1], selected: false, note: '' })) };
     try { const saved = localStorage.getItem('lamMienGuest_' + id); if (saved) { const s = JSON.parse(saved); if (s && s.photos && s.photos.length) al = s; } } catch (_) {}
     return al;
@@ -446,8 +488,18 @@
   function openClient(al, bound) {
     clientAlbum = al; clientBound = !!bound; clientFilter = 'all';
     $('#login-view').hidden = true; $('#app').hidden = true; $('#client').hidden = false;
-    $('#client-brand').textContent = al.brandName || brand.name;
-    $('#client-title').textContent = brand.welcome || 'Chọn những khoảnh khắc bạn yêu thích';
+    const brandName = al.brandName || brand.name;
+    const welcome = al.welcome || brand.welcome || 'Chọn những khoảnh khắc bạn yêu thích';
+    $('#client-brand').textContent = brandName;
+    $('#client-title').textContent = al.name || 'Album của bạn';
+    // banner ảnh bìa
+    const cov = albumCover(al);
+    $('#client-cover').hidden = !cov;
+    if (cov) {
+      $('#client-cover-img').src = cov;
+      $('#client-cover-title').textContent = welcome;
+      $('#client-cover-sub').textContent = brandName;
+    }
     // nút quay lại (chỉ khi xem trước từ dashboard)
     let back = $('#client-back');
     if (bound) {

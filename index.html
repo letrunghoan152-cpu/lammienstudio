@@ -128,9 +128,14 @@
         </div>
         <div class="detail-body">
           <aside class="detail-side">
-            <div class="side-head">PHOTOS</div>
+            <div class="cover-box">
+              <img id="ad-cover" alt="Ảnh bìa">
+              <button class="cover-change" id="ad-change-cover"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>Đổi ảnh bìa</button>
+            </div>
+            <div class="side-head"><span>PHOTOS</span><button class="add-set" id="ad-add-edited">+ Ảnh sửa</button></div>
             <button class="set-item active" data-set="goc"><span>📂 Ảnh gốc</span><span class="cnt" id="ad-goc-cnt">0</span></button>
             <button class="set-item" data-set="chon"><span>❤️ Ảnh chọn</span><span class="cnt" id="ad-chon-cnt">0</span></button>
+            <button class="set-item" data-set="sua"><span>🎨 Ảnh sửa</span><span class="cnt" id="ad-sua-cnt">0</span></button>
           </aside>
           <div class="detail-main">
             <div class="detail-grid-head"><h2 id="ad-set-title">ẢNH GỐC</h2></div>
@@ -146,6 +151,14 @@
     <div class="client-top">
       <svg class="logo" viewBox="0 0 52 52"><rect width="52" height="52" rx="14" fill="#7c5cfc"/><path d="M26 39s-11-6.5-11-14C15 20 18 16.5 22 16.5c1.9 0 3.6 1 4 2.6.4-1.6 2.1-2.6 4-2.6 4 0 7 3.5 7 8.5 0 7.5-11 14-11 14z" fill="#fff"/><circle cx="34.5" cy="18.5" r="2.4" fill="#fb6f92"/></svg>
       <div><strong id="client-brand">Lam Miên Studio</strong><small>Trang chọn ảnh</small></div>
+    </div>
+    <div class="client-cover" id="client-cover" hidden>
+      <img id="client-cover-img" alt="">
+      <div class="cover-overlay">
+        <h1 id="client-cover-title">Album của bạn đã sẵn sàng</h1>
+        <p id="client-cover-sub">Lam Miên Studio</p>
+        <span class="scroll-hint">Lướt xuống để bắt đầu chọn ảnh ⌄</span>
+      </div>
     </div>
     <div class="client-wrap">
       <div class="client-intro">
