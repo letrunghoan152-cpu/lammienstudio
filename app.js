@@ -436,6 +436,61 @@
   }
   $('#ad-back').addEventListener('click', () => { pickingCover = false; gotoPage('page-albums'); renderAlbums(); });
   $$('#page-albumdetail .set-item').forEach(b => b.addEventListener('click', () => { detailSet = b.dataset.set; renderDetail(); }));
+  $$('#page-albumdetail .set-dl').forEach(b => b.addEventListener('click', e => {
+    e.stopPropagation();
+    if (!detailAlbum) return;
+    const set = b.dataset.dl;
+    zipDownloadSet(setList(set), zipName(set), b);
+  }));
+
+  /* ---------- Tải & nén .zip (cho studio) ---------- */
+  function setList(set) {
+    const al = detailAlbum;
+    if (set === 'chon') return al.photos.filter(p => p.review === 'selected' || p.selected);
+    if (set === 'sua') return al.editedPhotos || [];
+    return al.photos;
+  }
+  function zipName(set) {
+    const al = detailAlbum;
+    const base = (al.client || al.name || 'album').replace(/[\\/:*?"<>|]+/g, '_').trim();
+    const suffix = set === 'chon' ? ' - Anh chon' : set === 'sua' ? ' - Anh sua' : '';
+    return base + suffix;
+  }
+  function safeFileName(name, i, used) {
+    let n = String(name || `anh_${i + 1}`).replace(/[\\/:*?"<>|]/g, '_');
+    if (!/\.[a-z0-9]{2,5}$/i.test(n)) n += '.jpg';
+    if (used.has(n)) { const dot = n.lastIndexOf('.'); n = n.slice(0, dot) + '_' + (i + 1) + n.slice(dot); }
+    used.add(n); return n;
+  }
+  async function zipDownloadSet(list, fname, btn) {
+    if (!list || !list.length) { toast('Folder này chưa có ảnh để tải'); return; }
+    if (typeof JSZip === 'undefined') { toast('Chưa tải được thư viện nén, kiểm tra mạng rồi thử lại'); return; }
+    if (list.length > 150 && !window.confirm(`Tải & nén ${list.length} ảnh gốc có thể nặng và lâu. Tiếp tục?`)) return;
+    const icon = btn ? btn.innerHTML : '';
+    if (btn) { btn.disabled = true; btn.style.width = 'auto'; btn.style.padding = '0 8px'; }
+    const setBtn = t => { if (btn) btn.textContent = t; };
+    const zip = new JSZip(); const used = new Set(); let ok = 0, fail = 0;
+    for (let i = 0; i < list.length; i++) {
+      const p = list[i]; setBtn(`${i + 1}/${list.length}`);
+      const id = p.driveId || driveIdFromThumb(p.src);
+      try {
+        const url = id
+          ? `https://www.googleapis.com/drive/v3/files/${id}?alt=media&key=${FIXED_DRIVE_KEY}&supportsAllDrives=true`
+          : (p.full || p.src);
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        zip.file(safeFileName(p.name, i, used), await res.blob());
+        ok++;
+      } catch (_) { fail++; }
+    }
+    if (!ok) { toast('Không tải được ảnh — kiểm tra thư mục Drive đã chia sẻ công khai chưa'); if (btn) { btn.disabled = false; btn.innerHTML = icon; btn.style.width = ''; btn.style.padding = ''; } return; }
+    setBtn('Nén…');
+    const blob = await zip.generateAsync({ type: 'blob' }, m => setBtn(Math.round(m.percent) + '%'));
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = fname + '.zip';
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
+    if (btn) { btn.disabled = false; btn.innerHTML = icon; btn.style.width = ''; btn.style.padding = ''; }
+    toast(`Đã tải ${ok} ảnh${fail ? ` (lỗi ${fail})` : ''} → ${fname}.zip`);
+  }
   $('#ad-preview').addEventListener('click', () => { if (detailAlbum) openClient(detailAlbum, true); });
   $('#ad-share').addEventListener('click', () => { if (detailAlbum) openShare(detailAlbum); });
   $('#ad-change-cover').addEventListener('click', () => {
