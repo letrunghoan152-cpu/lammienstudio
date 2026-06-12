@@ -115,6 +115,29 @@
           </div>
         </div>
       </section>
+
+      <!-- ===== CHI TIẾT ALBUM ===== -->
+      <section class="page" id="page-albumdetail">
+        <div class="detail-top">
+          <button class="icon-btn" id="ad-back" title="Quay lại"><svg viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></button>
+          <div class="detail-title"><strong id="ad-name"></strong><small id="ad-meta"></small></div>
+          <span class="status-pill" id="ad-status"><span class="dot"></span></span>
+          <span class="grow"></span>
+          <button class="btn ghost sm" id="ad-preview"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>Xem trang khách</button>
+          <button class="btn primary sm" id="ad-share"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></svg>Chia sẻ link</button>
+        </div>
+        <div class="detail-body">
+          <aside class="detail-side">
+            <div class="side-head">PHOTOS</div>
+            <button class="set-item active" data-set="goc"><span>📂 Ảnh gốc</span><span class="cnt" id="ad-goc-cnt">0</span></button>
+            <button class="set-item" data-set="chon"><span>❤️ Ảnh chọn</span><span class="cnt" id="ad-chon-cnt">0</span></button>
+          </aside>
+          <div class="detail-main">
+            <div class="detail-grid-head"><h2 id="ad-set-title">ẢNH GỐC</h2></div>
+            <div class="detail-grid" id="ad-grid"></div>
+          </div>
+        </div>
+      </section>
     </main>
   </div>
 

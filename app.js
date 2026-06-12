@@ -32,6 +32,8 @@
   let pickedFiles = [];
   // client picker
   let clientAlbum = null, clientBound = false, clientFilter = 'all', lbIndex = -1;
+  // album detail (studio)
+  let detailAlbum = null, detailSet = 'goc';
 
   /* ---------- Helpers ---------- */
   function genId() { return 'al' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
@@ -83,6 +85,7 @@
   function showApp() {
     $('#login-view').hidden = true; $('#app').hidden = false; $('#client').hidden = true;
     renderAlbums();
+    if ($('#page-albumdetail').classList.contains('active') && detailAlbum) renderDetail();
   }
   $('#login-form').addEventListener('submit', e => {
     e.preventDefault();
@@ -310,6 +313,10 @@
     card.querySelector('[data-act="editmax"]').addEventListener('click', () => editMax(al));
     card.querySelector('[data-act="download"]').addEventListener('change', e => { al.allowDownload = e.target.checked; al.lastActivity = Date.now(); saveAlbums(); });
 
+    // mở chi tiết album khi bấm ảnh bìa / tên
+    card.querySelector('.acard-cover').addEventListener('click', () => openAlbumDetail(al.id));
+    card.querySelector('.acard-title').addEventListener('click', () => openAlbumDetail(al.id));
+
     return card;
   }
 
@@ -332,7 +339,56 @@
     const a = albums.find(x => x.id === id);
     if (!window.confirm(`Xoá album “${a ? a.name : ''}”?`)) return;
     albums = albums.filter(x => x.id !== id); saveAlbums(); renderAlbums(); toast('Đã xoá album');
+    if (detailAlbum && detailAlbum.id === id) { detailAlbum = null; gotoPage('page-albums'); }
   }
+
+  /* ---------- Chi tiết album ---------- */
+  function gotoPage(id) { $$('.page').forEach(p => p.classList.toggle('active', p.id === id)); window.scrollTo({ top: 0 }); }
+  function openAlbumDetail(id) {
+    const al = albums.find(x => x.id === id); if (!al) return;
+    detailAlbum = al; detailSet = 'goc';
+    $$('.sb-nav a').forEach(x => x.classList.toggle('active', x.dataset.page === 'albums'));
+    gotoPage('page-albumdetail');
+    renderDetail();
+  }
+  function renderDetail() {
+    const al = detailAlbum; if (!al) return;
+    $('#ad-name').textContent = al.name;
+    const parts = [];
+    if (al.client) parts.push(al.client);
+    if (al.shootDate) parts.push('Chụp ' + fmtVN(al.shootDate) + (al.shootHour != null ? ` ${al.shootHour}h` : ''));
+    if (al.deadline) parts.push('Hạn trả ' + fmtVN(al.deadline));
+    $('#ad-meta').textContent = parts.join(' · ') || 'Chưa có thông tin';
+    const st = statusOf(al.status);
+    const stEl = $('#ad-status'); stEl.className = 'status-pill ' + st.cls; stEl.innerHTML = `<span class="dot"></span>${st.label}`;
+
+    const selPhotos = al.photos.filter(p => p.selected);
+    $('#ad-goc-cnt').textContent = al.photos.length;
+    $('#ad-chon-cnt').textContent = selPhotos.length;
+    $$('#page-albumdetail .set-item').forEach(b => b.classList.toggle('active', b.dataset.set === detailSet));
+
+    const list = detailSet === 'chon' ? selPhotos : al.photos;
+    $('#ad-set-title').textContent = detailSet === 'chon' ? `ẢNH CHỌN (${selPhotos.length})` : `ẢNH GỐC (${al.photos.length})`;
+    const grid = $('#ad-grid'); grid.innerHTML = '';
+    if (!list.length) {
+      grid.innerHTML = detailSet === 'chon'
+        ? `<p class="sub" style="color:var(--muted)">Khách chưa chọn ảnh nào. Khi khách chọn, ảnh sẽ tự xuất hiện ở đây.</p>`
+        : `<p class="sub" style="color:var(--muted)">Album chưa có ảnh.</p>`;
+      return;
+    }
+    list.forEach(p => {
+      const ext = (String(p.name).split('.').pop() || 'IMG').toUpperCase().slice(0, 4);
+      const d = document.createElement('div');
+      d.className = 'dthumb' + (p.selected ? ' sel' : '');
+      d.innerHTML = `<img src="${escapeAttr(p.src)}" alt="" loading="lazy"><span class="dtag">${escapeHtml(ext)}</span>${p.selected ? '<span class="dheart">♥</span>' : ''}`;
+      d.addEventListener('click', () => window.open(p.full || p.src, '_blank'));
+      grid.appendChild(d);
+    });
+  }
+  $('#ad-back').addEventListener('click', () => { gotoPage('page-albums'); renderAlbums(); });
+  $$('#page-albumdetail .set-item').forEach(b => b.addEventListener('click', () => { detailSet = b.dataset.set; renderDetail(); }));
+  $('#ad-preview').addEventListener('click', () => { if (detailAlbum) openClient(detailAlbum, true); });
+  $('#ad-share').addEventListener('click', () => { if (detailAlbum) openShare(detailAlbum); });
 
   /* ---------- Share link ---------- */
   function b64encode(s) { return btoa(unescape(encodeURIComponent(s))); }
