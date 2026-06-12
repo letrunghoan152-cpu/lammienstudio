@@ -364,16 +364,17 @@ select {
 .pcard:hover .pcard-top { opacity: 1; }
 .pcard .fname { flex: 1; min-width: 0; padding: 4px 9px; border-radius: 7px; background: rgba(10,11,14,.7); font-size: 11px; font-weight: 600; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; backdrop-filter: blur(4px); }
 .pcard .note-dot { position: absolute; top: 10px; right: 10px; z-index: 3; width: 22px; height: 22px; border-radius: 50%; background: var(--amber); display: grid; place-items: center; font-size: 11px; }
-.pcard-acts { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; display: flex; align-items: center; gap: 6px; padding: 26px 10px 10px; background: linear-gradient(transparent, rgba(0,0,0,.82)); opacity: 0; transition: opacity .15s; }
+.pcard-acts { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; display: flex; flex-direction: column; gap: 8px; padding: 34px 10px 10px; background: linear-gradient(transparent, rgba(0,0,0,.85)); opacity: 0; transition: opacity .15s; }
 .pcard:hover .pcard-acts, .pcard.s-selected .pcard-acts, .pcard.s-later .pcard-acts { opacity: 1; }
-.pcard-acts .mini { width: 32px; height: 32px; flex: none; border-radius: 8px; border: 0; background: rgba(255,255,255,.14); color: #fff; cursor: pointer; display: grid; place-items: center; }
-.pcard-acts .mini:hover { background: rgba(255,255,255,.26); }
+.act-icons { display: flex; gap: 6px; }
+.pcard-acts .mini { width: 32px; height: 32px; flex: none; border-radius: 8px; border: 0; background: rgba(255,255,255,.16); color: #fff; cursor: pointer; display: grid; place-items: center; transition: background .15s; }
+.pcard-acts .mini:hover { background: rgba(255,255,255,.3); }
 .pcard-acts .mini svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; }
-.pcard-acts .grow { flex: 1; }
-.pcard-acts .pill { padding: 7px 12px; border-radius: 8px; border: 0; cursor: pointer; font-size: 12px; font-weight: 700; background: rgba(255,255,255,.14); color: #fff; white-space: nowrap; }
-.pcard-acts .pill.choose { background: var(--brand); }
-.pcard.s-selected .pcard-acts .pill.choose { background: #22c55e; }
-.pcard-acts .pill.later.on { background: var(--amber); color: #1a1a1a; }
+.pcard-acts .mini.on { background: var(--amber); color: #1a1a1a; }
+.pcard-acts .mini.on-amber { background: var(--amber); color: #1a1a1a; }
+.choosebtn { width: 100%; padding: 9px; border: 0; border-radius: 9px; background: var(--brand); color: #fff; font-weight: 700; font-size: 13px; cursor: pointer; transition: background .15s; }
+.choosebtn:hover { background: var(--brand-600); }
+.choosebtn.on { background: #22c55e; }
 
 .scroll-top { position: fixed; bottom: 22px; right: 22px; z-index: 35; width: 46px; height: 46px; border-radius: 50%; border: 1px solid var(--line); background: var(--panel-3); color: var(--text); cursor: pointer; display: none; place-items: center; box-shadow: var(--shadow-sm); }
 .scroll-top.show { display: grid; }

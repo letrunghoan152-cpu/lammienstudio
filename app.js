@@ -564,6 +564,7 @@
   const ICN = {
     dl: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>',
     note: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
+    later: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg>',
     skip: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>',
     copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M5 16H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h11a1 1 0 0 1 1 1v1"/></svg>'
   };
@@ -574,15 +575,15 @@
     const dl = (clientAlbum && clientAlbum.allowDownload) ? `<button class="mini" data-a="download" title="Tải ảnh gốc">${ICN.dl}</button>` : '';
     card.innerHTML = `
       <div class="pcard-top"><span class="fname" title="${escapeAttr(p.name)}">${escapeHtml(p.name)}</span><button class="mini" data-a="copy" title="Chép tên ảnh">${ICN.copy}</button></div>
-      ${p.note ? '<span class="note-dot" title="Có ghi chú">📝</span>' : ''}
       <img src="${escapeAttr(p.src)}" alt="${escapeAttr(p.name)}" loading="lazy" decoding="async">
       <div class="pcard-acts">
-        ${dl}
-        <button class="mini" data-a="note" title="Ghi chú">${ICN.note}</button>
-        <button class="mini" data-a="skip" title="Bỏ qua">${ICN.skip}</button>
-        <span class="grow"></span>
-        <button class="pill later${p.review === 'later' ? ' on' : ''}" data-a="later">Xem lại sau</button>
-        <button class="pill choose" data-a="choose">${p.review === 'selected' ? '✓ Đã chọn' : 'Chọn'}</button>
+        <div class="act-icons">
+          ${dl}
+          <button class="mini${p.note ? ' on' : ''}" data-a="note" title="Ghi chú">${ICN.note}</button>
+          <button class="mini${p.review === 'later' ? ' on-amber' : ''}" data-a="later" title="Xem lại sau">${ICN.later}</button>
+          <button class="mini" data-a="skip" title="Bỏ qua">${ICN.skip}</button>
+        </div>
+        <button class="choosebtn${p.review === 'selected' ? ' on' : ''}" data-a="choose">${p.review === 'selected' ? '✓ Đã chọn' : 'Chọn ảnh'}</button>
       </div>`;
     card.querySelector('img').addEventListener('click', () => openLightbox(clientAlbum.photos, clientAlbum.photos.indexOf(p), 'client'));
     card.querySelectorAll('[data-a]').forEach(b => b.addEventListener('click', ev => {
