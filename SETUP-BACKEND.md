@@ -46,6 +46,28 @@ create table albums (
 3. Mở máy/điện thoại khác → đăng nhập → thấy đủ album.
 4. Bấm **Chia sẻ link** trong album → link mới dạng ngắn `...?al=xxx` → gửi khách. Khách chọn xong, studio mở album sẽ thấy folder **Ảnh chọn** tự cập nhật.
 
+## Quản lý tài khoản nhân sự bằng Google Sheets (tuỳ chọn)
+
+Thay vì 1 tài khoản chung, bạn có thể quản lý nhiều tài khoản trong một bảng tính (chỉnh sửa y hệt Excel):
+
+1. Tạo **Google Sheets** mới trong Drive, đặt tên ví dụ `Tài khoản nhân sự Lam Miên`.
+2. Nhập theo cột (không cần dòng tiêu đề, có cũng không sao):
+
+| A — Tài khoản | B — Mật khẩu | C — Tên hiển thị | D — Trạng thái |
+|---|---|---|---|
+| huyen.le | matkhau123 | Huyền Lê | |
+| minh.tran | abc@2026 | Minh Trần | |
+| thu.pham | xyz789 | Thu Phạm | off |
+
+   - Cột D để **trống** = đang hoạt động; ghi `off` / `khóa` / `x` = khoá tài khoản đó.
+3. Bấm **Chia sẻ** → "Bất kỳ ai có đường liên kết" → **Người xem**.
+4. Lấy **ID của sheet** từ thanh địa chỉ: `https://docs.google.com/spreadsheets/d/`**`PHẦN_NÀY_LÀ_ID`**`/edit...`
+5. Vercel → **Settings → Environment Variables** → thêm biến `STAFF_SHEET_ID` = ID vừa copy → **Redeploy**.
+
+Từ đó: thêm/xoá/đổi mật khẩu nhân sự = sửa sheet, web tự nhận trong ~1 phút. Tài khoản chủ (`STAFF_USER`/`STAFF_PASS` trên Vercel) **luôn đăng nhập được** kể cả khi sheet lỗi — không sợ tự khoá mình.
+
+⚠️ Bảo mật: sheet ở chế độ "ai có link đều xem được" — **tuyệt đối không gửi link sheet cho ai**; link chỉ nằm trong cấu hình Vercel. Muốn thu hồi toàn bộ: đổi chia sẻ về "Bị hạn chế".
+
 ## Ghi chú
 
 - Chưa làm các bước trên thì web vẫn chạy như cũ (chế độ offline, dữ liệu lưu theo từng máy).

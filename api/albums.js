@@ -6,7 +6,7 @@ const { supa, configured, checkAuth } = require('./_supa');
 
 module.exports = async (req, res) => {
   if (!configured()) return res.status(503).json({ error: 'Chưa cấu hình SUPABASE_URL / SUPABASE_SERVICE_KEY' });
-  if (!checkAuth(req)) return res.status(401).json({ error: 'Chưa đăng nhập' });
+  if (!(await checkAuth(req))) return res.status(401).json({ error: 'Chưa đăng nhập' });
 
   try {
     if (req.method === 'GET') {

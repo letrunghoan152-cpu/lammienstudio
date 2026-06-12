@@ -1,6 +1,7 @@
-// Helper dùng chung cho các serverless function — kết nối Supabase REST
+// Helper dùng chung cho các serverless function — Supabase + xác thực nhân sự
 const BASE = process.env.SUPABASE_URL;
 const KEY = process.env.SUPABASE_SERVICE_KEY;
+const SHEET_ID = process.env.STAFF_SHEET_ID; // Google Sheet quản lý tài khoản nhân sự
 
 function configured() { return !!(BASE && KEY); }
 
@@ -26,8 +27,59 @@ async function supa(path, opts = {}) {
 function staffUser() { return process.env.STAFF_USER || 'lammien'; }
 function staffPass() { return process.env.STAFF_PASS || 'lammien'; }
 
-function checkAuth(req) {
-  return req.headers['x-user'] === staffUser() && req.headers['x-pass'] === staffPass();
+/* ---- Đọc danh sách nhân sự từ Google Sheet (cột: A tài khoản, B mật khẩu, C tên, D trạng thái) ---- */
+function parseCsv(text) {
+  const rows = []; let row = [], cur = '', q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) {
+      if (c === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else q = false; }
+      else cur += c;
+    } else if (c === '"') q = true;
+    else if (c === ',') { row.push(cur); cur = ''; }
+    else if (c === '\n') { row.push(cur); rows.push(row); row = []; cur = ''; }
+    else if (c !== '\r') cur += c;
+  }
+  if (cur !== '' || row.length) { row.push(cur); rows.push(row); }
+  return rows;
 }
 
-module.exports = { supa, configured, checkAuth, staffUser, staffPass };
+let staffCache = { at: 0, list: null };
+async function staffList() {
+  if (!SHEET_ID) return null;
+  if (staffCache.list && Date.now() - staffCache.at < 60000) return staffCache.list; // cache 60s
+  const res = await fetch(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv`);
+  if (!res.ok) throw new Error('Không đọc được sheet tài khoản (' + res.status + ')');
+  const rows = parseCsv(await res.text());
+  const list = rows
+    .map(r => ({
+      user: (r[0] || '').trim(),
+      pass: (r[1] || '').trim(),
+      name: (r[2] || '').trim(),
+      active: !/^(off|kh[oó]a|0|no|x)$/i.test((r[3] || '').trim()),
+    }))
+    .filter(a => a.user && a.pass && !/^(user|t[aà]i kho[aả]n|account|username)$/i.test(a.user));
+  staffCache = { at: Date.now(), list };
+  return list;
+}
+
+// Trả về {user, name} nếu hợp lệ; null nếu sai
+async function validUser(user, pass) {
+  if (!user || !pass) return null;
+  // Tài khoản chủ (env trên Vercel) luôn đăng nhập được — không bao giờ tự khoá mình
+  if (user === staffUser() && pass === staffPass()) return { user, name: 'Chủ studio' };
+  try {
+    const list = await staffList();
+    if (list) {
+      const f = list.find(a => a.active && a.user === user && a.pass === pass);
+      if (f) return { user: f.user, name: f.name || f.user };
+    }
+  } catch (_) { /* sheet lỗi -> chỉ tài khoản chủ đăng nhập được */ }
+  return null;
+}
+
+async function checkAuth(req) {
+  return !!(await validUser(req.headers['x-user'], req.headers['x-pass']));
+}
+
+module.exports = { supa, configured, checkAuth, validUser, staffUser, staffPass };

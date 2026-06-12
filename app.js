@@ -146,6 +146,11 @@
   function showLogin() { $('#login-view').hidden = false; $('#app').hidden = true; $('#client').hidden = true; }
   function showApp() {
     $('#login-view').hidden = true; $('#app').hidden = false; $('#client').hidden = true;
+    if (apiAuth) {
+      const nm = apiAuth.name || apiAuth.u;
+      $('#sb-name').textContent = nm;
+      $('#sb-av').textContent = (nm.trim()[0] || 'L').toUpperCase();
+    }
     renderAlbums();
     if ($('#page-albumdetail').classList.contains('active') && detailAlbum) renderDetail();
     // làm mới ngầm từ máy chủ (để thấy lựa chọn khách vừa gửi)
@@ -161,7 +166,7 @@
       const r = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user: u, pass: p }) });
       if (r.ok) {
         const d = await r.json();
-        apiAuth = { u, p };
+        apiAuth = { u, p, name: d.name || u };
         try { localStorage.setItem(API_AUTH_KEY, JSON.stringify(apiAuth)); } catch (_) {}
         viaApi = true;
         if (d.sync) { await refreshAlbumsFromServer(); }
