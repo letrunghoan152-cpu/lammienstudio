@@ -13,6 +13,7 @@
   const LOGIN_PASS = 'lammien';
   const FIXED_DRIVE_KEY = 'AIzaSyB30IdJg_FKZpi2oOmF8bS7qMEna5P2dpg';
   const API_AUTH_KEY = 'lamMienApiAuth';
+  const MIGRATED_KEY = 'lamMienMigrated';
 
   /* ---------- API (đồng bộ đa thiết bị) ---------- */
   let apiAuth = null;          // {u, p} của nhân sự
@@ -24,7 +25,7 @@
     return h;
   }
   async function apiListAlbums() {
-    const r = await fetch('/api/albums', { headers: apiHeaders() });
+    const r = await fetch('/api/albums?t=' + Date.now(), { headers: apiHeaders(), cache: 'no-store' });
     if (!r.ok) throw new Error('HTTP ' + r.status);
     return r.json();
   }
@@ -39,7 +40,7 @@
     fetch('/api/albums?id=' + encodeURIComponent(id), { method: 'DELETE', headers: apiHeaders() }).catch(() => {});
   }
   async function apiGetAlbum(id) {
-    const r = await fetch('/api/album?id=' + encodeURIComponent(id));
+    const r = await fetch('/api/album?id=' + encodeURIComponent(id) + '&t=' + Date.now(), { cache: 'no-store' });
     if (!r.ok) throw new Error('HTTP ' + r.status);
     return r.json();
   }
@@ -48,11 +49,20 @@
     try {
       const list = await apiListAlbums();
       apiSync = true;
-      // Gộp 2 chiều: album máy chủ là nguồn chính; album chỉ có trên máy này thì đẩy lên (không bao giờ ghi đè mất dữ liệu)
       const serverIds = new Set(list.map(a => a.id));
-      const localOnly = albums.filter(a => a.id && !serverIds.has(a.id));
-      localOnly.forEach(apiPushAlbum);
-      albums = list.concat(localOnly).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+      const migrated = localStorage.getItem(MIGRATED_KEY) === '1';
+      if (!migrated && list.length === 0 && albums.length > 0) {
+        // Lần đầu bật đồng bộ, máy chủ trống: di cư toàn bộ album cục bộ lên (1 lần duy nhất)
+        albums.filter(a => a.id).forEach(apiPushAlbum);
+      } else {
+        // Máy chủ là nguồn chính. Chỉ giữ album VỪA TẠO trên máy này (<60s) chưa kịp đồng bộ,
+        // để không vô tình "hồi sinh" album đã xoá ở thiết bị khác.
+        const recent = albums.filter(a => !serverIds.has(a.id) && (Date.now() - (a.createdAt || 0) < 60000));
+        recent.forEach(apiPushAlbum);
+        albums = list.concat(recent);
+      }
+      albums.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+      try { localStorage.setItem(MIGRATED_KEY, '1'); } catch (_) {}
       saveAlbumsLocal();
       return true;
     } catch (_) { return false; }
