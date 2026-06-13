@@ -83,6 +83,7 @@
   let albums = [];
   let brand = { name: 'Lam Miên Studio', welcome: 'Chọn những khoảnh khắc bạn yêu thích' };
   let currentFilter = 'all';
+  let albumsView = 'grid', progView = 'list';
   let currentSource = 'drive';
   let pickedFiles = [];
   // client picker
@@ -236,13 +237,19 @@
     const page = a.dataset.page;
     $$('.sb-nav a').forEach(x => x.classList.toggle('active', x === a));
     $$('.page').forEach(p => p.classList.toggle('active', p.id === 'page-' + page));
-    $('#sidebar').classList.remove('open');
+    setSidebar(false);
     window.scrollTo({ top: 0 });
     if (page === 'albums') renderAlbums();
     if (page === 'progress') renderProgress();
     if (page === 'trash') renderTrash();
   }));
-  $('#sb-toggle').addEventListener('click', () => $('#sidebar').classList.toggle('open'));
+  function setSidebar(open) { $('#sidebar').classList.toggle('open', open); const o = $('#sb-overlay'); if (o) o.hidden = !open; }
+  $('#sb-toggle').addEventListener('click', () => setSidebar(!$('#sidebar').classList.contains('open')));
+  $('#sb-overlay').addEventListener('click', () => setSidebar(false));
+  (function () { let sx = 0, sy = 0;
+    $('#sidebar').addEventListener('touchstart', e => { const t = e.changedTouches[0]; sx = t.clientX; sy = t.clientY; }, { passive: true });
+    $('#sidebar').addEventListener('touchend', e => { const t = e.changedTouches[0]; if (t.clientX - sx < -45 && Math.abs(t.clientY - sy) < 60) setSidebar(false); }, { passive: true });
+  })();
 
   /* ---------- Google Drive ---------- */
   function extractFolderId(t) {
@@ -378,6 +385,7 @@
   function renderGrid() {
     const grid = $('#albums-grid'), empty = $('#albums-empty');
     grid.innerHTML = '';
+    grid.className = 'albums-grid' + (albumsView === 'list' ? ' listv' : '');
     const act = activeAlbums();
     const list = act.filter(a => currentFilter === 'all' || a.status === currentFilter);
     if (!act.length) { empty.hidden = false; grid.hidden = true; return; }
@@ -1265,6 +1273,8 @@
   function renderProgress() {
     const list = $('#progress-list'), empty = $('#progress-empty'), banner = $('#deadline-banner');
     list.innerHTML = '';
+    list.className = progView === 'grid' ? 'prog-cards' : '';
+    $('.prog-head').style.display = progView === 'grid' ? 'none' : '';
     const act = activeAlbums();
     if (!act.length) { empty.hidden = false; list.hidden = true; banner.innerHTML = ''; return; }
     empty.hidden = true; list.hidden = false;
@@ -1318,6 +1328,8 @@
   $('#pg-ftype').addEventListener('change', renderProgress);
   $('#pg-fdate').addEventListener('change', renderProgress);
   $('#pg-fclear').addEventListener('click', () => { $('#pg-fdate').value = ''; renderProgress(); });
+  $$('#albums-view button').forEach(b => b.addEventListener('click', () => { albumsView = b.dataset.v; $$('#albums-view button').forEach(x => x.classList.toggle('active', x === b)); renderGrid(); }));
+  $$('#prog-view button').forEach(b => b.addEventListener('click', () => { progView = b.dataset.v; $$('#prog-view button').forEach(x => x.classList.toggle('active', x === b)); renderProgress(); }));
 
   /* ---------- Tự cập nhật (thiết bị khác thêm/sửa album) ---------- */
   function autoRefresh() {
