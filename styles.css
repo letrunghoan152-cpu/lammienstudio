@@ -407,6 +407,7 @@ select {
 .cfolder .fdl svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2; }
 
 .cinfo { margin: 0 2px 14px; color: var(--muted-2); font-size: 13px; }
+.grid-empty { padding: 60px 20px; text-align: center; color: var(--muted); font-size: 15px; }
 
 /* ===== Lưới ảnh — 3 chế độ ===== */
 .pcard { position: relative; border-radius: 12px; overflow: hidden; background: #16181e; border: 2px solid transparent; transition: border-color .2s ease, box-shadow .2s ease; }

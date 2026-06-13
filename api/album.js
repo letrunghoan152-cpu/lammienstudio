@@ -18,6 +18,11 @@ module.exports = async (req, res) => {
     if (req.method === 'POST') {
       const { review, status } = req.body || {};
       if (review && typeof review === 'object') {
+        // Chặn vượt số ảnh tối đa (phòng request cố tình vượt giới hạn)
+        if (data.maxCount) {
+          const want = Object.keys(review).filter(k => review[k] && review[k].r === 'selected').length;
+          if (want > data.maxCount) return res.status(400).json({ error: `Vượt quá ${data.maxCount} ảnh tối đa` });
+        }
         (data.photos || []).forEach(p => {
           const u = review[p.id];
           if (u) {

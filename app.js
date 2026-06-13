@@ -31,8 +31,8 @@
   function apiPushAlbum(al) {
     if (!apiSync || !apiAuth || !al) return;
     fetch('/api/albums', { method: 'POST', headers: apiHeaders(), body: JSON.stringify({ album: al }) })
-      .then(r => { if (!r.ok) console.warn('Sync album lỗi', r.status); })
-      .catch(() => {});
+      .then(r => { if (!r.ok) toast('⚠ Lưu lên máy chủ thất bại — kiểm tra mạng rồi thử lại'); })
+      .catch(() => toast('⚠ Mất kết nối máy chủ — thay đổi chưa được lưu'));
   }
   function apiDeleteAlbum(id) {
     if (!apiSync || !apiAuth) return;
@@ -150,9 +150,15 @@
   function setDriveKey(k) { try { k ? localStorage.setItem(DKEY, k) : localStorage.removeItem(DKEY); } catch (_) {} }
 
   /* ---------- Auth ---------- */
-  function showLogin() { $('#login-view').hidden = false; $('#app').hidden = true; $('#client').hidden = true; }
+  function hideAllScreens() { $('#login-view').hidden = true; $('#app').hidden = true; $('#client').hidden = true; const ce = $('#client-error'); if (ce) ce.hidden = true; }
+  function showLogin() { hideAllScreens(); $('#login-view').hidden = false; }
+  function showClientError(msg) {
+    hideAllScreens(); $('#client-error').hidden = false;
+    if (msg) $('#cerr-msg').textContent = msg;
+  }
+  $('#cerr-retry').addEventListener('click', () => location.reload());
   function showApp() {
-    $('#login-view').hidden = true; $('#app').hidden = false; $('#client').hidden = true;
+    hideAllScreens(); $('#app').hidden = false;
     if (apiAuth) {
       const nm = apiAuth.name || apiAuth.u;
       $('#sb-name').textContent = nm;
@@ -227,6 +233,15 @@
   }
   const driveThumb = (id, sz) => `https://drive.google.com/thumbnail?id=${id}&sz=${sz || 'w400'}`;
   function driveIdFromThumb(u) { const m = String(u).match(/[?&]id=([a-zA-Z0-9_-]+)/) || String(u).match(/\/d\/([a-zA-Z0-9_-]+)/); return m ? m[1] : ''; }
+  // Khi thumbnail Drive lỗi/bị giới hạn -> thử nguồn lh3 (cũng từ Drive), rồi mới chịu thua
+  function attachImgFallback(img, p) {
+    if (!img) return; let tried = 0;
+    img.addEventListener('error', () => {
+      const id = p.driveId || driveIdFromThumb(p.src); if (!id) return;
+      if (tried === 0) { tried = 1; img.src = `https://lh3.googleusercontent.com/d/${id}=w600`; }
+      else if (tried === 1) { tried = 2; img.src = driveThumb(id, 'w400'); } // thử lại 1 lần nữa (qua cơn rate-limit)
+    });
+  }
   async function listDriveFolder(folderId, apiKey) {
     let files = [], pageToken = '';
     do {
@@ -513,6 +528,7 @@
     const d = document.createElement('div');
     d.className = 'dthumb' + (p.selected ? ' sel' : '') + (pickingCover ? ' picking' : '');
     d.innerHTML = `<img src="${escapeAttr(p.src)}" alt="" loading="lazy" decoding="async"><span class="dtag">${escapeHtml(ext)}</span>${p.selected ? '<span class="dheart">♥</span>' : ''}`;
+    attachImgFallback(d.querySelector('img'), p);
     d.addEventListener('click', () => {
       if (pickingCover) {
         detailAlbum.cover = p.full || p.src; pickingCover = false; detailAlbum.lastActivity = Date.now();
@@ -532,6 +548,7 @@
       ${p.note ? '<span title="' + escapeAttr(p.note) + '">📝</span>' : ''}
       ${p.selected ? '<span class="hrt">♥</span>' : ''}
       <span class="ext">${escapeHtml(ext)}</span>`;
+    attachImgFallback(d.querySelector('img'), p);
     d.addEventListener('click', () => {
       if (pickingCover) {
         detailAlbum.cover = p.full || p.src; pickingCover = false; detailAlbum.lastActivity = Date.now();
@@ -728,7 +745,7 @@
   /* ---------- Client picker ---------- */
   function openClient(al, bound, remote) {
     clientAlbum = al; clientBound = !!bound; clientRemote = !!remote; clientFilter = 'all';
-    $('#login-view').hidden = true; $('#app').hidden = true; $('#client').hidden = false;
+    hideAllScreens(); $('#client').hidden = false;
     const brandName = al.brandName || brand.name;
     const welcome = al.welcome || brand.welcome || 'Chọn những khoảnh khắc bạn yêu thích';
     $('#client-brand').textContent = brandName;
@@ -750,8 +767,11 @@
       if (!back) { back = document.createElement('button'); back.id = 'client-back'; back.className = 'btn ghost sm'; back.textContent = '← Bảng điều khiển'; back.style.marginLeft = 'auto'; $('.client-top').appendChild(back); back.addEventListener('click', () => { saveClient(); showApp(); }); }
       back.hidden = false;
     } else if (back) { back.hidden = true; }
-    clientFilter = 'all'; clientFolder = 'goc'; clientSort = 'az';
+    clientFilter = 'all'; clientFolder = 'goc'; clientSort = 'az'; clientView = 'masonry';
     $$('#ctabs .ctab').forEach(c => c.classList.toggle('active', c.dataset.f === 'all'));
+    $('#cl-sort').textContent = 'A→Z';
+    $$('#cl-view button').forEach(x => x.classList.toggle('active', x.dataset.v === 'masonry'));
+    $('#ctabs').style.display = ''; $('.cstatus .cmeta').style.visibility = ''; $('#finish-btn').style.display = '';
     renderFolders();
     renderClient();
     window.scrollTo({ top: 0 });
@@ -831,7 +851,9 @@
           <button class="choosebtn${p.review === 'selected' ? ' on' : ''}" data-a="choose">${p.review === 'selected' ? '✓ Đã chọn' : 'Chọn ảnh'}</button>
         </div>`;
     }
-    card.querySelector('img').addEventListener('click', () => openLightbox(clientList, clientList.indexOf(p), editing ? 'view' : 'client'));
+    const im = card.querySelector('img');
+    im.addEventListener('click', () => openLightbox(clientList, clientList.indexOf(p), editing ? 'view' : 'client'));
+    attachImgFallback(im, p);
     card.querySelectorAll('[data-a]').forEach(b => b.addEventListener('click', ev => {
       ev.stopPropagation();
       const a = b.dataset.a;
@@ -884,6 +906,13 @@
     list.sort((a, b) => (clientSort === 'az' ? 1 : -1) * String(a.name).localeCompare(String(b.name), undefined, { numeric: true }));
     clientList = list;
     clientShown = 0;
+    if (!list.length) {
+      const labels = { all: 'Chưa có ảnh nào trong album.', selected: 'Bạn chưa chọn ảnh nào.', later: 'Chưa có ảnh nào để xem lại sau.', skipped: 'Chưa bỏ qua ảnh nào.', unseen: 'Bạn đã xem hết ảnh rồi 🎉' };
+      grid.className = 'photo-grid';
+      grid.innerHTML = `<div class="grid-empty">${clientFolder === 'sua' ? 'Album chưa có ảnh sửa.' : (labels[clientFilter] || 'Không có ảnh.')}</div>`;
+      updateClientUI();
+      return;
+    }
     appendClientBatch();
     setupClientSentinel();
     updateClientUI();
@@ -982,6 +1011,7 @@
   function showLbPhoto(p) {
     const img = $('#lb-img'); const token = ++lbLoadToken;
     img.alt = p.name || '';
+    img.onerror = () => { img.onerror = null; const id = p.driveId || driveIdFromThumb(p.src); if (id) img.src = `https://lh3.googleusercontent.com/d/${id}=w1200`; };
     // Hiện thumbnail (đã cache trong lưới) ngay lập tức → không giật
     img.src = p.src || p.full;
     // Rồi âm thầm nâng lên bản nét; chỉ áp dụng nếu vẫn đang xem ảnh này
@@ -1057,7 +1087,7 @@
       clientAlbum.status = 'done';
       if (!clientAlbum.selectedAt) { clientAlbum.selectedAt = Date.now(); recomputeDeadline(clientAlbum); }
       saveClient();
-    } else if (clientRemote) { clearTimeout(guestSyncTimer); pushGuestSelection('done'); toast('Đã gửi lựa chọn về studio 🎉'); }
+    } else if (clientRemote) { clearTimeout(saveClientTimer); saveClientTimer = null; pushGuestSelection('done'); toast('Đã gửi lựa chọn về studio 🎉'); }
     $('#sum-count').textContent = sel.length;
     $('#summary-list').innerHTML = sel.map((p, i) => `<div class="r"><span class="nm">${i + 1}. ${escapeHtml(p.name)}</span>${p.note ? `<span class="nt">${escapeHtml(p.note)}</span>` : ''}</div>`).join('');
     $('#summary-modal').classList.add('open');
@@ -1177,8 +1207,7 @@
       if (shared && shared.album) {
         openClient(shared.album, shared.bound, shared.remote);
       } else {
-        toast(shared && shared.error ? shared.error : 'Link không hợp lệ hoặc album đã bị xoá');
-        showLogin();
+        showClientError(shared && shared.error ? shared.error : 'Link không hợp lệ hoặc album đã bị xoá.');
       }
     } else if (localStorage.getItem(AUTH_KEY) === '1') {
       showApp();
