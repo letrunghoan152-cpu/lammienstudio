@@ -1169,25 +1169,23 @@
     $('#lb-note-btn').hidden = !(isClient && clientAlbum && clientAlbum.allowNotes);
     $('#lb-later').hidden = !isClient;
     $('#lb-choose').hidden = !isClient;
-    if (isClient) syncLb(); else $('#lb-sub').textContent = `${i + 1} / ${lbPhotos.length} ảnh`;
+    syncLb();
     $('#lightbox').classList.add('open');
   }
   function closeLb() { $('#lightbox').classList.remove('open'); lbIndex = -1; }
   function lbStep(d) { if (lbIndex < 0 || !lbPhotos.length) return; openLightbox(lbPhotos, (lbIndex + d + lbPhotos.length) % lbPhotos.length, lbMode); }
   function syncLb() {
     const p = lbPhotos[lbIndex]; if (!p) return;
-    $('#lb-name').textContent = `${p.name || ''}${p.note ? '  📝' : ''}`;
+    $('#lb-name').textContent = (p.name || '') + (p.note ? '  📝' : '');
+    $('#lb-sub').textContent = `${lbIndex + 1} / ${lbPhotos.length}`;
     if (lbMode === 'client' && clientAlbum) {
       const n = cSel().length, max = clientAlbum.maxCount;
-      const remain = max ? Math.max(0, max - n) : null;
-      const pct = max ? Math.min(100, n / max * 100) : 0;
-      $('#lb-sub').innerHTML = (max ? `Còn ${remain} ảnh có thể chọn · ${n}/${max}` : `Đã chọn ${n} ảnh`) +
-        (max ? ` <span class="lb-pg"><i style="width:${pct}%"></i></span>` : '') +
-        `<br><small>${lbIndex + 1} / ${lbPhotos.length} ảnh</small>`;
-      const ch = $('#lb-choose'); ch.textContent = p.review === 'selected' ? '✓ Đã chọn' : 'Chọn'; ch.classList.toggle('on', p.review === 'selected');
-      const lt = $('#lb-later'); lt.classList.toggle('on', p.review === 'later');
-    } else {
-      $('#lb-sub').textContent = `${lbIndex + 1} / ${lbPhotos.length} ảnh`;
+      const sel = p.review === 'selected';
+      const limit = max && n >= max && !sel;
+      const ch = $('#lb-choose');
+      ch.textContent = sel ? '✓ Đã chọn' : (limit ? 'Đã đạt giới hạn' : 'Chọn');
+      ch.classList.toggle('on', sel); ch.disabled = limit;
+      $('#lb-later').classList.toggle('on', p.review === 'later');
     }
   }
   $('#lb-close').addEventListener('click', closeLb);
@@ -1197,6 +1195,7 @@
   $('#lb-later').addEventListener('click', () => { if (lbMode === 'client' && lbIndex >= 0) setReview(lbPhotos[lbIndex].id, 'later'); });
   $('#lb-note-btn').addEventListener('click', () => { if (lbMode === 'client' && lbIndex >= 0) openNote(lbPhotos[lbIndex].id); });
   $('#lb-dl').addEventListener('click', () => { if (lbIndex >= 0) downloadPhoto(lbPhotos[lbIndex]); });
+  $('#lb-copy').addEventListener('click', () => { if (lbIndex >= 0) copyText(lbPhotos[lbIndex].name, 'Đã chép tên ảnh'); });
   $('#lightbox').addEventListener('click', e => { if (e.target.id === 'lightbox') closeLb(); });
   let lbSwiped = false;
   $('#lb-img').addEventListener('click', () => { if (lbSwiped) { lbSwiped = false; return; } lbStep(1); });  // bấm ảnh -> ảnh kế tiếp
