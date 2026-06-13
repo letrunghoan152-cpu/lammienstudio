@@ -864,10 +864,14 @@
     const im = card.querySelector('img');
     // Giữ chỗ đúng tỉ lệ ảnh (chống nhảy layout) + khung skeleton mờ -> ảnh fade vào
     if (clientView !== 'list') {
-      im.style.aspectRatio = (p.w && p.h) ? `${p.w} / ${p.h}` : '4 / 5';
+      // Biết kích thước -> giữ chỗ đúng tỉ lệ ngay; chưa biết -> lấy tỉ lệ thật khi ảnh tải xong
+      if (p.w && p.h) im.style.aspectRatio = `${p.w} / ${p.h}`;
       card.classList.add('skel');
-      const markLoaded = () => { im.classList.add('loaded'); card.classList.remove('skel'); };
-      if (im.complete && im.naturalWidth) markLoaded(); else im.addEventListener('load', markLoaded, { once: false });
+      const markLoaded = () => {
+        if (!(p.w && p.h) && im.naturalWidth) { im.style.aspectRatio = `${im.naturalWidth} / ${im.naturalHeight}`; p.w = im.naturalWidth; p.h = im.naturalHeight; }
+        im.classList.add('loaded'); card.classList.remove('skel');
+      };
+      if (im.complete && im.naturalWidth) markLoaded(); else im.addEventListener('load', markLoaded);
     } else { im.classList.add('loaded'); }
     im.addEventListener('click', () => openLightbox(clientList, clientList.indexOf(p), editing ? 'view' : 'client'));
     attachImgFallback(im, p);

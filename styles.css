@@ -437,11 +437,11 @@ select {
 
 /* ===== Lưới ảnh — 3 chế độ ===== */
 .pcard { position: relative; border-radius: 12px; overflow: hidden; background: #16181e; border: 2px solid transparent; transition: border-color .2s ease, box-shadow .2s ease; }
-.pcard img { width: 100%; height: auto; display: block; cursor: zoom-in; opacity: 0; transition: opacity .45s ease, transform .25s ease; }
+.pcard img { width: 100%; height: auto; display: block; cursor: zoom-in; object-fit: cover; opacity: 0; transition: opacity .45s ease, transform .25s ease; }
 .pcard img.loaded { opacity: 1; }
 .pcard:hover img { transform: scale(1.015); }
-/* khung skeleton mờ trong lúc ảnh tải */
-.pcard.skel { background: linear-gradient(100deg, #14161b 28%, #232831 50%, #14161b 72%); background-size: 200% 100%; animation: shimmer 1.3s ease-in-out infinite; }
+/* khung skeleton mờ trong lúc ảnh tải (chưa biết tỉ lệ -> giữ chiều cao tạm để khỏi co thành sọc) */
+.pcard.skel { min-height: 140px; background: linear-gradient(100deg, #14161b 28%, #232831 50%, #14161b 72%); background-size: 200% 100%; animation: shimmer 1.3s ease-in-out infinite; }
 @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 .pcard.s-selected { box-shadow: 0 0 0 1px var(--brand), 0 6px 20px rgba(124,92,252,.28); }
 /* Masonry */
