@@ -147,6 +147,12 @@
   }
 
   /* ---------- Persistence ---------- */
+  function activeAlbums() { return albums.filter(a => !a.trashed); }
+  function trashedAlbums() { return albums.filter(a => a.trashed); }
+  function updateTrashBadge() {
+    const n = trashedAlbums().length, b = $('#trash-badge');
+    if (b) { b.hidden = n === 0; b.textContent = n; }
+  }
   function saveAlbumsLocal() { try { localStorage.setItem(ALBUMS_KEY, JSON.stringify(albums)); } catch (_) {} }
   // changed: album vừa sửa -> đồng bộ đúng album đó lên máy chủ
   function saveAlbums(changed) { saveAlbumsLocal(); if (changed) apiPushAlbum(changed); }
@@ -224,6 +230,7 @@
     window.scrollTo({ top: 0 });
     if (page === 'albums') renderAlbums();
     if (page === 'progress') renderProgress();
+    if (page === 'trash') renderTrash();
   }));
   $('#sb-toggle').addEventListener('click', () => $('#sidebar').classList.toggle('open'));
 
@@ -349,19 +356,21 @@
       const dot = color ? `<span class="dot" style="width:8px;height:8px;border-radius:50%;background:${color}"></span>` : '';
       return `<button class="filter-chip${active}" data-f="${key}">${dot}<span>${label}</span><span class="cnt">(${count})</span></button>`;
     };
-    let html = chip('all', 'Tất cả', albums.length, null);
-    STATUSES.forEach(s => { html += chip(s.key, s.label, albums.filter(a => a.status === s.key).length, s.color); });
+    const act = activeAlbums();
+    let html = chip('all', 'Tất cả', act.length, null);
+    STATUSES.forEach(s => { html += chip(s.key, s.label, act.filter(a => a.status === s.key).length, s.color); });
     el.innerHTML = html;
     $$('#filters .filter-chip').forEach(b => b.addEventListener('click', () => { currentFilter = b.dataset.f; renderAlbums(); }));
   }
 
-  function renderAlbums() { renderFilters(); renderGrid(); }
+  function renderAlbums() { renderFilters(); renderGrid(); updateTrashBadge(); }
 
   function renderGrid() {
     const grid = $('#albums-grid'), empty = $('#albums-empty');
     grid.innerHTML = '';
-    const list = albums.filter(a => currentFilter === 'all' || a.status === currentFilter);
-    if (!albums.length) { empty.hidden = false; grid.hidden = true; return; }
+    const act = activeAlbums();
+    const list = act.filter(a => currentFilter === 'all' || a.status === currentFilter);
+    if (!act.length) { empty.hidden = false; grid.hidden = true; return; }
     empty.hidden = true; grid.hidden = false;
     if (!list.length) { grid.innerHTML = `<p class="sub" style="color:var(--muted)">Không có album ở trạng thái này.</p>`; return; }
 
@@ -466,11 +475,55 @@
     saveAlbums(al); renderAlbums();
   }
   function deleteAlbum(id) {
-    const a = albums.find(x => x.id === id);
-    if (!window.confirm(`Xoá album “${a ? a.name : ''}”?`)) return;
-    albums = albums.filter(x => x.id !== id); saveAlbumsLocal(); apiDeleteAlbum(id); renderAlbums(); toast('Đã xoá album');
+    const a = albums.find(x => x.id === id); if (!a) return;
+    if (!window.confirm(`Chuyển album “${a.name}” vào thùng rác?`)) return;
+    a.trashed = true; a.trashedAt = Date.now(); a.lastActivity = Date.now();
+    saveAlbums(a); renderAlbums(); updateTrashBadge(); toast('Đã chuyển vào thùng rác');
     if (detailAlbum && detailAlbum.id === id) { detailAlbum = null; gotoPage('page-albums'); }
   }
+  /* ---------- Thùng rác ---------- */
+  function renderTrash() {
+    const grid = $('#trash-grid'), empty = $('#trash-empty-msg'); grid.innerHTML = '';
+    const list = trashedAlbums().sort((a, b) => (b.trashedAt || 0) - (a.trashedAt || 0));
+    $('#trash-empty').style.display = list.length ? '' : 'none';
+    if (!list.length) { empty.hidden = false; grid.hidden = true; updateTrashBadge(); return; }
+    empty.hidden = true; grid.hidden = false;
+    list.forEach(al => {
+      const cover = (al.photos[0] && al.photos[0].src) || '';
+      const card = document.createElement('div');
+      card.className = 'tcard';
+      card.innerHTML = `
+        <div class="acard-cover">${cover ? `<img src="${escapeAttr(cover)}" alt="">` : '<span class="ph">🖼️</span>'}</div>
+        <div class="tcard-body">
+          <strong>${escapeHtml(al.name)}</strong>
+          <small>${al.photos.length} ảnh · xoá ${fmtVN(toYMD(al.trashedAt || Date.now()))}</small>
+          <div class="tcard-acts">
+            <button class="btn ghost sm" data-act="restore">Khôi phục</button>
+            <button class="btn danger sm" data-act="purge">Xoá vĩnh viễn</button>
+          </div>
+        </div>`;
+      card.querySelector('[data-act="restore"]').addEventListener('click', () => restoreAlbum(al.id));
+      card.querySelector('[data-act="purge"]').addEventListener('click', () => purgeAlbum(al.id));
+      grid.appendChild(card);
+    });
+    updateTrashBadge();
+  }
+  function restoreAlbum(id) {
+    const a = albums.find(x => x.id === id); if (!a) return;
+    a.trashed = false; a.trashedAt = 0; a.lastActivity = Date.now();
+    saveAlbums(a); renderTrash(); renderAlbums(); toast('Đã khôi phục album');
+  }
+  function purgeAlbum(id) {
+    const a = albums.find(x => x.id === id);
+    if (!window.confirm(`Xoá vĩnh viễn album “${a ? a.name : ''}”? Không thể lấy lại.`)) return;
+    albums = albums.filter(x => x.id !== id); saveAlbumsLocal(); apiDeleteAlbum(id); renderTrash(); toast('Đã xoá vĩnh viễn');
+  }
+  $('#trash-empty').addEventListener('click', () => {
+    const list = trashedAlbums(); if (!list.length) return;
+    if (!window.confirm(`Xoá vĩnh viễn ${list.length} album trong thùng rác? Không thể lấy lại.`)) return;
+    list.forEach(a => apiDeleteAlbum(a.id));
+    albums = activeAlbums(); saveAlbumsLocal(); renderTrash(); toast('Đã dọn sạch thùng rác');
+  });
 
   /* ---------- Chi tiết album ---------- */
   function gotoPage(id) { $$('.page').forEach(p => p.classList.toggle('active', p.id === id)); window.scrollTo({ top: 0 }); }
@@ -1180,21 +1233,23 @@
   function isSoon(al) { const d = daysLeft(al.deadline); return al.status !== 'delivered' && d !== null && d >= 0 && d <= 3; }
 
   function progFiltered() {
+    const act = activeAlbums();
     const fdate = $('#pg-fdate').value;
-    if (!fdate) return albums.slice();
+    if (!fdate) return act;
     const ftype = $('#pg-ftype').value;
-    return albums.filter(a => ftype === 'selected'
+    return act.filter(a => ftype === 'selected'
       ? (a.selectedAt && toYMD(a.selectedAt) === fdate)
       : (a.shootDate === fdate));
   }
   function renderProgress() {
     const list = $('#progress-list'), empty = $('#progress-empty'), banner = $('#deadline-banner');
     list.innerHTML = '';
-    if (!albums.length) { empty.hidden = false; list.hidden = true; banner.innerHTML = ''; return; }
+    const act = activeAlbums();
+    if (!act.length) { empty.hidden = false; list.hidden = true; banner.innerHTML = ''; return; }
     empty.hidden = true; list.hidden = false;
 
-    const over = albums.filter(isOverdue).length;
-    const soon = albums.filter(isSoon).length;
+    const over = act.filter(isOverdue).length;
+    const soon = act.filter(isSoon).length;
     if (over) {
       banner.innerHTML = `<div class="banner alert"><svg viewBox="0 0 24 24"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg><span><strong>${over}</strong> album đang cháy deadline${soon ? `, <strong>${soon}</strong> album sắp đến hạn` : ''} — cần xử lý gấp!</span></div>`;
     } else if (soon) {
