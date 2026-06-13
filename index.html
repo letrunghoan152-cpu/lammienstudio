@@ -219,22 +219,21 @@
         <button class="cover-guide" id="cover-guide"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 2.5-3 2.5"/><path d="M12 17h.01"/></svg>Hướng dẫn</button>
       </div>
       <div class="cbar" id="selbar">
+        <div class="ctabs" id="ctabs">
+          <button class="ctab active" data-f="all">Tất cả ảnh</button>
+          <button class="ctab" data-f="selected">Ảnh bạn đã chọn</button>
+          <button class="ctab" data-f="later">Ảnh xem lại sau</button>
+          <button class="ctab" data-f="skipped">Ảnh đã bỏ qua</button>
+          <button class="ctab" data-f="unseen">Ảnh chưa xem</button>
+        </div>
         <div class="cbar-row1">
-          <div class="ctabs" id="ctabs">
-            <button class="ctab active" data-f="all">Tất cả ảnh</button>
-            <button class="ctab" data-f="selected">Ảnh bạn đã chọn</button>
-            <button class="ctab" data-f="later">Ảnh xem lại sau</button>
-            <button class="ctab" data-f="skipped">Ảnh đã bỏ qua</button>
-            <button class="ctab" data-f="unseen">Ảnh chưa xem</button>
-          </div>
-          <span class="grow"></span>
           <div class="cmeta">
             <span class="count-pill">Bạn đã chọn <b id="sel-count">0</b><span id="sel-max"></span></span>
             <div class="cprogress"><i id="progress-bar"></i></div>
           </div>
+          <span class="grow"></span>
           <button class="btn primary" id="finish-btn">Gửi hậu kỳ</button>
         </div>
-        <p class="cbar-desc" id="cbar-desc">Hiển thị tất cả ảnh, gồm ảnh đã chọn, ảnh xem lại sau, ảnh đã bỏ qua và ảnh chưa xem.</p>
         <div class="cbar-row3">
           <span id="cpage-info">Ảnh 1 - 0, Tổng 0</span>
           <span class="grow"></span>

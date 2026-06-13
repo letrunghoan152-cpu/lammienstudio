@@ -897,32 +897,35 @@
     note: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
     later: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg>',
     skip: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>',
-    copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M5 16H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h11a1 1 0 0 1 1 1v1"/></svg>'
+    copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M5 16H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h11a1 1 0 0 1 1 1v1"/></svg>',
+    dots: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>'
   };
   function buildPhotoCard(p) {
     const editing = clientFolder === 'sua';
     const dlAllowed = clientAlbum && clientAlbum.allowDownload;
     const card = document.createElement('figure');
-    card.className = 'pcard' + (!editing && p.review ? ' s-' + p.review : (p.review === 'selected' ? ' sel' : ''));
+    card.className = 'pcard' + (p.review === 'selected' ? ' s-selected' : p.review ? ' s-' + p.review : '');
     card.dataset.id = p.id;
-    const dlBtn = dlAllowed ? `<button class="mini" data-a="download" title="Tải ảnh gốc">${ICN.dl}</button>` : '';
     if (editing) {
       card.innerHTML = `
-        <div class="pcard-top"><span class="fname" title="${escapeAttr(p.name)}">${escapeHtml(p.name)}</span></div>
         <img src="${escapeAttr(p.src)}" alt="${escapeAttr(p.name)}" loading="lazy" decoding="async">
-        ${dlAllowed ? `<div class="pcard-acts"><div class="act-icons">${dlBtn}</div></div>` : ''}`;
+        <div class="pbar"><span class="fname" title="${escapeAttr(p.name)}">${escapeHtml(p.name)}</span>${dlAllowed ? `<button class="more-btn" data-a="download" title="Tải ảnh">${ICN.dl}</button>` : ''}</div>`;
     } else {
       card.innerHTML = `
-        <div class="pcard-top"><span class="fname" title="${escapeAttr(p.name)}">${escapeHtml(p.name)}</span><button class="mini" data-a="copy" title="Chép tên ảnh">${ICN.copy}</button></div>
         <img src="${escapeAttr(p.src)}" alt="${escapeAttr(p.name)}" loading="lazy" decoding="async">
-        <div class="pcard-acts">
-          <div class="act-icons">
-            ${dlBtn}
-            <button class="mini${p.note ? ' on' : ''}" data-a="note" title="Ghi chú">${ICN.note}</button>
-            <button class="mini${p.review === 'later' ? ' on-amber' : ''}" data-a="later" title="Xem lại sau">${ICN.later}</button>
-            <button class="mini" data-a="skip" title="Bỏ qua">${ICN.skip}</button>
+        <div class="pbar">
+          <span class="fname" title="${escapeAttr(p.name)}">${escapeHtml(p.name)}</span>
+          <button class="choosebtn${p.review === 'selected' ? ' on' : ''}" data-a="choose">${p.review === 'selected' ? '✓' : 'Chọn'}</button>
+          <div class="pmore">
+            <button class="more-btn" data-a="more" title="Thêm">${ICN.dots}</button>
+            <div class="pmenu" hidden>
+              <button data-a="copy">${ICN.copy}<span>Chép tên</span></button>
+              ${dlAllowed ? `<button data-a="download">${ICN.dl}<span>Tải ảnh</span></button>` : ''}
+              <button data-a="note">${ICN.note}<span>Ghi chú</span></button>
+              <button class="${p.review === 'later' ? 'on' : ''}" data-a="later">${ICN.later}<span>Xem lại sau</span></button>
+              <button data-a="skip">${ICN.skip}<span>Bỏ qua</span></button>
+            </div>
           </div>
-          <button class="choosebtn${p.review === 'selected' ? ' on' : ''}" data-a="choose">${p.review === 'selected' ? '✓ Đã chọn' : 'Chọn ảnh'}</button>
         </div>`;
     }
     const im = card.querySelector('img');
@@ -942,6 +945,8 @@
     card.querySelectorAll('[data-a]').forEach(b => b.addEventListener('click', ev => {
       ev.stopPropagation();
       const a = b.dataset.a;
+      if (a === 'more') { const m = card.querySelector('.pmenu'); const open = m.hidden; closeClientMenus(); m.hidden = !open; return; }
+      closeClientMenus();
       if (a === 'choose') setReview(p.id, 'selected');
       else if (a === 'later') setReview(p.id, 'later');
       else if (a === 'skip') setReview(p.id, 'skipped');
@@ -951,6 +956,8 @@
     }));
     return card;
   }
+  function closeClientMenus() { $$('#photo-grid .pmenu').forEach(m => m.hidden = true); }
+  document.addEventListener('click', closeClientMenus);
   function appendClientBatch() {
     const grid = $('#photo-grid');
     const frag = document.createDocumentFragment();
@@ -1026,11 +1033,9 @@
     card.classList.toggle('s-selected', p.review === 'selected');
     card.classList.toggle('s-later', p.review === 'later');
     card.classList.toggle('s-skipped', p.review === 'skipped');
-    card.classList.toggle('sel', p.review === 'selected');
     const ch = card.querySelector('.choosebtn');
-    if (ch) { ch.textContent = p.review === 'selected' ? '✓ Đã chọn' : 'Chọn ảnh'; ch.classList.toggle('on', p.review === 'selected'); ch.classList.remove('pop'); void ch.offsetWidth; ch.classList.add('pop'); }
-    const lt = card.querySelector('[data-a="later"]'); if (lt) lt.classList.toggle('on-amber', p.review === 'later');
-    const nt = card.querySelector('[data-a="note"]'); if (nt) nt.classList.toggle('on', !!p.note);
+    if (ch) { ch.textContent = p.review === 'selected' ? '✓' : 'Chọn'; ch.classList.toggle('on', p.review === 'selected'); ch.classList.remove('pop'); void ch.offsetWidth; ch.classList.add('pop'); }
+    const lt = card.querySelector('[data-a="later"]'); if (lt) lt.classList.toggle('on', p.review === 'later');
   }
   function setReview(id, state) {
     const p = clientAlbum.photos.find(x => x.id === id); if (!p) return;
@@ -1054,8 +1059,6 @@
     $('#cc-max').textContent = max ? `Bạn được chọn tối đa ${max} ảnh` : 'Bạn có thể chọn không giới hạn';
     $('#cc-total').textContent = `Tổng ảnh: ${total}`;
     $('#cc-sel').textContent = `Đã chọn: ${n}${max ? ` / ${max}` : ''}`;
-    // mô tả theo tab
-    $('#cbar-desc').textContent = clientFolder === 'sua' ? 'Ảnh đã chỉnh sửa — xem và tải về.' : (FILTER_DESC[clientFilter] || '');
     // phân trang
     const len = clientList.length, pages = Math.max(1, Math.ceil(len / CLIENT_PAGE));
     const start = len ? clientPage * CLIENT_PAGE + 1 : 0, end = Math.min((clientPage + 1) * CLIENT_PAGE, len);
@@ -1195,7 +1198,16 @@
   $('#lb-note-btn').addEventListener('click', () => { if (lbMode === 'client' && lbIndex >= 0) openNote(lbPhotos[lbIndex].id); });
   $('#lb-dl').addEventListener('click', () => { if (lbIndex >= 0) downloadPhoto(lbPhotos[lbIndex]); });
   $('#lightbox').addEventListener('click', e => { if (e.target.id === 'lightbox') closeLb(); });
-  $('#lb-img').addEventListener('click', () => lbStep(1));  // bấm ảnh để xem ảnh kế tiếp
+  let lbSwiped = false;
+  $('#lb-img').addEventListener('click', () => { if (lbSwiped) { lbSwiped = false; return; } lbStep(1); });  // bấm ảnh -> ảnh kế tiếp
+  // Vuốt: trái/phải đổi ảnh, vuốt xuống để đóng
+  let lbTX = 0, lbTY = 0;
+  $('#lightbox').addEventListener('touchstart', e => { const t = e.changedTouches[0]; lbTX = t.clientX; lbTY = t.clientY; lbSwiped = false; }, { passive: true });
+  $('#lightbox').addEventListener('touchend', e => {
+    const t = e.changedTouches[0], dx = t.clientX - lbTX, dy = t.clientY - lbTY;
+    if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy)) { lbSwiped = true; lbStep(dx < 0 ? 1 : -1); }
+    else if (dy > 90 && Math.abs(dy) > Math.abs(dx)) { lbSwiped = true; closeLb(); }
+  }, { passive: true });
   document.addEventListener('keydown', e => {
     if (!$('#lightbox').classList.contains('open')) return;
     if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return; // đang gõ ghi chú
@@ -1307,6 +1319,24 @@
   $('#pg-ftype').addEventListener('change', renderProgress);
   $('#pg-fdate').addEventListener('change', renderProgress);
   $('#pg-fclear').addEventListener('click', () => { $('#pg-fdate').value = ''; renderProgress(); });
+
+  /* ---------- Tự cập nhật (thiết bị khác thêm/sửa album) ---------- */
+  function autoRefresh() {
+    if ($('#app').hidden || !apiAuth) return;
+    refreshAlbumsFromServer().then(ok => {
+      if (!ok) return;
+      if ($('#page-albums').classList.contains('active')) renderAlbums();
+      else if ($('#page-progress').classList.contains('active')) renderProgress();
+      else if ($('#page-trash').classList.contains('active')) renderTrash();
+      else if ($('#page-albumdetail').classList.contains('active') && detailAlbum) {
+        const fresh = albums.find(x => x.id === detailAlbum.id);
+        if (fresh) { detailAlbum = fresh; renderDetail(); } else { gotoPage('page-albums'); renderAlbums(); }
+      }
+    });
+  }
+  window.addEventListener('focus', autoRefresh);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) autoRefresh(); });
+  setInterval(autoRefresh, 25000);
 
   /* ---------- Init ---------- */
   (async () => {
