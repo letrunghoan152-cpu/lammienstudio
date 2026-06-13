@@ -780,15 +780,21 @@
       zipDownloadSet(folderPhotos(f), nm.replace(/[\\/:*?"<>|]+/g, '_'), b);
     }));
   }
+  let saveClientTimer = null;
+  function flushSaveClient() {
+    if (!clientAlbum || !saveClientTimer) return;
+    clearTimeout(saveClientTimer); saveClientTimer = null;
+    if (clientBound) { clientAlbum.lastActivity = Date.now(); saveAlbums(clientAlbum); }
+    else { try { localStorage.setItem('lamMienGuest_' + clientAlbum.id, JSON.stringify(clientAlbum)); } catch (_) {} if (clientRemote) pushGuestSelection(); }
+  }
+  // Gom mọi thay đổi rồi mới ghi (sau 500ms) -> bấm chọn không bị khựng
   function saveClient() {
     if (!clientAlbum) return;
-    if (clientBound) { clientAlbum.lastActivity = Date.now(); saveAlbums(clientAlbum); return; }
-    try { localStorage.setItem('lamMienGuest_' + clientAlbum.id, JSON.stringify(clientAlbum)); } catch (_) {}
-    if (clientRemote) {
-      clearTimeout(guestSyncTimer);
-      guestSyncTimer = setTimeout(() => pushGuestSelection(), 900); // gom thay đổi rồi đẩy 1 lần
-    }
+    clearTimeout(saveClientTimer);
+    saveClientTimer = setTimeout(() => { saveClientTimer = 1; flushSaveClient(); }, 500);
   }
+  window.addEventListener('pagehide', flushSaveClient);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) flushSaveClient(); });
   function cSel() { return clientAlbum ? clientAlbum.photos.filter(p => p.review === 'selected') : []; }
   function cCount(state) { return clientAlbum ? clientAlbum.photos.filter(p => p.review === state).length : 0; }
 
@@ -882,9 +888,18 @@
     setupClientSentinel();
     updateClientUI();
   }
-  function replaceCard(p) {
-    const old = $('#photo-grid').querySelector(`.pcard[data-id="${p.id}"]`);
-    if (old) old.replaceWith(buildPhotoCard(p));
+  // Cập nhật trạng thái 1 thẻ tại chỗ (không dựng lại DOM -> mượt, không reflow)
+  function updateCardState(p) {
+    const card = $('#photo-grid').querySelector(`.pcard[data-id="${p.id}"]`);
+    if (!card) return;
+    card.classList.toggle('s-selected', p.review === 'selected');
+    card.classList.toggle('s-later', p.review === 'later');
+    card.classList.toggle('s-skipped', p.review === 'skipped');
+    card.classList.toggle('sel', p.review === 'selected');
+    const ch = card.querySelector('.choosebtn');
+    if (ch) { ch.textContent = p.review === 'selected' ? '✓ Đã chọn' : 'Chọn ảnh'; ch.classList.toggle('on', p.review === 'selected'); ch.classList.remove('pop'); void ch.offsetWidth; ch.classList.add('pop'); }
+    const lt = card.querySelector('[data-a="later"]'); if (lt) lt.classList.toggle('on-amber', p.review === 'later');
+    const nt = card.querySelector('[data-a="note"]'); if (nt) nt.classList.toggle('on', !!p.note);
   }
   function setReview(id, state) {
     const p = clientAlbum.photos.find(x => x.id === id); if (!p) return;
@@ -894,7 +909,8 @@
     p.review = (p.review === state) ? '' : state;
     p.selected = (p.review === 'selected');
     saveClient();
-    if (clientFilter === 'all') replaceCard(p); else renderClient();
+    // lọc 'Tất cả' -> cập nhật tại chỗ; đang lọc theo trạng thái -> ảnh có thể đổi nhóm nên vẽ lại
+    if (clientFilter === 'all') updateCardState(p); else renderClient();
     updateClientUI();
     if (lbIndex >= 0) syncLb();
   }
@@ -927,7 +943,7 @@
   $('#note-modal').addEventListener('click', e => { if (e.target.id === 'note-modal') closeNote(); });
   $('#note-save').addEventListener('click', () => {
     const p = clientAlbum && clientAlbum.photos.find(x => x.id === noteTargetId);
-    if (p) { p.note = $('#note-text').value.trim(); saveClient(); if (clientFilter === 'all') replaceCard(p); else renderClient(); if (lbIndex >= 0) syncLb(); toast('Đã lưu ghi chú'); }
+    if (p) { p.note = $('#note-text').value.trim(); saveClient(); updateCardState(p); if (lbIndex >= 0) syncLb(); toast('Đã lưu ghi chú'); }
     closeNote();
   });
 

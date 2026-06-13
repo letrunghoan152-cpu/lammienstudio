@@ -35,6 +35,7 @@
 
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
+@media (prefers-reduced-motion: reduce) { * { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
 html, body { height: 100%; }
 body {
   margin: 0; background: var(--bg); color: var(--text);
@@ -384,6 +385,8 @@ select {
 .ctab.active { background: var(--brand); color: #fff; border-color: transparent; }
 .ctab .cn { font-size: 11px; font-weight: 800; padding: 1px 7px; border-radius: 99px; background: rgba(255,255,255,.12); }
 .ctab.active .cn { background: rgba(255,255,255,.25); }
+.ctab:active, .cfolder:active, .icon-btn:active { transform: scale(.95); }
+.icon-btn, .ctab, .cfolder { transition: background .15s, color .15s, border-color .15s, transform .1s ease; }
 .cstatus { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .cmeta { display: flex; align-items: center; gap: 10px; }
 .count-pill { display: inline-flex; align-items: center; gap: 8px; padding: 7px 13px; border-radius: 99px; background: var(--brand-soft); color: #c4b6ff; font-weight: 800; font-size: 13px; white-space: nowrap; }
@@ -406,8 +409,10 @@ select {
 .cinfo { margin: 0 2px 14px; color: var(--muted-2); font-size: 13px; }
 
 /* ===== Lưới ảnh — 3 chế độ ===== */
-.pcard { position: relative; border-radius: 12px; overflow: hidden; background: #16181e; border: 2px solid transparent; transition: border-color .15s; }
-.pcard img { width: 100%; height: auto; display: block; cursor: zoom-in; }
+.pcard { position: relative; border-radius: 12px; overflow: hidden; background: #16181e; border: 2px solid transparent; transition: border-color .2s ease, box-shadow .2s ease; }
+.pcard img { width: 100%; height: auto; display: block; cursor: zoom-in; transition: transform .25s ease; }
+.pcard:hover img { transform: scale(1.015); }
+.pcard.s-selected { box-shadow: 0 0 0 1px var(--brand), 0 6px 20px rgba(124,92,252,.28); }
 /* Masonry */
 .photo-grid.masonry { column-count: 4; column-gap: 8px; }
 .photo-grid.masonry .pcard { display: inline-block; width: 100%; margin: 0 0 8px; break-inside: avoid; }
@@ -438,14 +443,18 @@ select {
 .pcard-acts { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; display: flex; flex-direction: column; gap: 8px; padding: 34px 10px 10px; background: linear-gradient(transparent, rgba(0,0,0,.85)); opacity: 0; transition: opacity .15s; }
 .pcard:hover .pcard-acts, .pcard.s-selected .pcard-acts, .pcard.s-later .pcard-acts { opacity: 1; }
 .act-icons { display: flex; gap: 6px; }
-.pcard-acts .mini { width: 32px; height: 32px; flex: none; border-radius: 8px; border: 0; background: rgba(255,255,255,.16); color: #fff; cursor: pointer; display: grid; place-items: center; transition: background .15s; }
+.pcard-acts .mini { width: 32px; height: 32px; flex: none; border-radius: 8px; border: 0; background: rgba(255,255,255,.16); color: #fff; cursor: pointer; display: grid; place-items: center; transition: background .15s, transform .1s ease; }
 .pcard-acts .mini:hover { background: rgba(255,255,255,.3); }
+.pcard-acts .mini:active { transform: scale(.86); }
 .pcard-acts .mini svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; }
 .pcard-acts .mini.on { background: var(--amber); color: #1a1a1a; }
 .pcard-acts .mini.on-amber { background: var(--amber); color: #1a1a1a; }
-.choosebtn { width: 100%; padding: 9px; border: 0; border-radius: 9px; background: var(--brand); color: #fff; font-weight: 700; font-size: 13px; cursor: pointer; transition: background .15s; }
+.choosebtn { width: 100%; padding: 9px; border: 0; border-radius: 9px; background: var(--brand); color: #fff; font-weight: 700; font-size: 13px; cursor: pointer; transition: background .18s ease, transform .12s ease; }
 .choosebtn:hover { background: var(--brand-600); }
+.choosebtn:active { transform: scale(.96); }
 .choosebtn.on { background: #22c55e; }
+.choosebtn.pop { animation: chosePop .3s ease; }
+@keyframes chosePop { 0% { transform: scale(1); } 40% { transform: scale(1.07); } 100% { transform: scale(1); } }
 
 .scroll-top { position: fixed; bottom: 22px; right: 22px; z-index: 35; width: 46px; height: 46px; border-radius: 50%; border: 1px solid var(--line); background: var(--panel-3); color: var(--text); cursor: pointer; display: none; place-items: center; box-shadow: var(--shadow-sm); }
 .scroll-top.show { display: grid; }
