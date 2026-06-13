@@ -777,7 +777,8 @@
       if (!back) { back = document.createElement('button'); back.id = 'client-back'; back.className = 'btn ghost sm'; back.textContent = '← Bảng điều khiển'; back.style.marginLeft = 'auto'; $('.client-top').appendChild(back); back.addEventListener('click', () => { saveClient(); showApp(); }); }
       back.hidden = false;
     } else if (back) { back.hidden = true; }
-    clientFilter = 'all'; clientFolder = 'goc'; clientSort = 'az'; clientView = 'masonry'; clientPage = 0;
+    clientFilter = 'all'; clientFolder = 'goc'; clientSort = 'none'; clientView = 'masonry'; clientPage = 0;
+    $('#cl-sort').classList.remove('on'); $('#cl-sort').title = 'Đang: thứ tự gốc';
     $$('#ctabs .ctab').forEach(c => c.classList.toggle('active', c.dataset.f === 'all'));
     $$('#cl-view button').forEach(x => x.classList.toggle('active', x.dataset.v === 'masonry'));
     $('#ctabs').style.display = ''; $('.cmeta').style.visibility = ''; $('#dl-all').style.display = ''; $('#finish-btn').style.display = '';
@@ -924,7 +925,9 @@
     grid.className = 'photo-grid ' + clientView;
     const base = folderPhotos(clientFolder);
     let list = (clientFolder === 'sua') ? base.slice() : base.filter(passFilter);
-    list.sort((a, b) => (clientSort === 'az' ? 1 : -1) * String(a.name).localeCompare(String(b.name), undefined, { numeric: true }));
+    // Mặc định: giữ nguyên thứ tự file (trái→phải). Chỉ sắp xếp khi chọn A→Z / Z→A
+    if (clientSort === 'az' || clientSort === 'za')
+      list.sort((a, b) => (clientSort === 'az' ? 1 : -1) * String(a.name).localeCompare(String(b.name), undefined, { numeric: true }));
     clientList = list;
     if (!list.length) {
       const labels = { all: 'Chưa có ảnh nào trong album.', selected: 'Bạn chưa chọn ảnh nào.', later: 'Chưa có ảnh nào để xem lại sau.', skipped: 'Chưa bỏ qua ảnh nào.', unseen: 'Bạn đã xem hết ảnh rồi 🎉' };
@@ -997,10 +1000,19 @@
     $('#cpage-cur').textContent = `Trang ${clientPage + 1}/${pages}`;
     $('#cpage-prev').disabled = clientPage <= 0;
     $('#cpage-next').disabled = clientPage >= pages - 1;
-    $('.cbar-row3').style.display = pages > 1 ? '' : (len > CLIENT_PAGE ? '' : '');
+    // Nút Gửi hậu kỳ: mờ tới khi chọn đủ số ảnh tối đa (nếu có giới hạn), hoặc khi chưa chọn ảnh nào
+    const fin = $('#finish-btn');
+    const ready = max ? (n >= max) : (n > 0);
+    fin.disabled = !ready;
+    fin.title = max ? (ready ? '' : `Hãy chọn đủ ${max} ảnh để gửi`) : (ready ? '' : 'Hãy chọn ít nhất 1 ảnh');
   }
   $$('#ctabs .ctab').forEach(c => c.addEventListener('click', () => { clientFilter = c.dataset.f; clientPage = 0; $$('#ctabs .ctab').forEach(x => x.classList.toggle('active', x === c)); renderClient(); }));
-  $('#cl-sort').addEventListener('click', () => { clientSort = clientSort === 'az' ? 'za' : 'az'; $('#cl-sort').title = clientSort === 'az' ? 'Sắp xếp A→Z' : 'Sắp xếp Z→A'; renderClient(); });
+  $('#cl-sort').addEventListener('click', () => {
+    clientSort = clientSort === 'none' ? 'az' : clientSort === 'az' ? 'za' : 'none';
+    $('#cl-sort').title = clientSort === 'az' ? 'Đang: A→Z' : clientSort === 'za' ? 'Đang: Z→A' : 'Đang: thứ tự gốc';
+    $('#cl-sort').classList.toggle('on', clientSort !== 'none');
+    renderClient();
+  });
   $$('#cl-view button').forEach(b => b.addEventListener('click', () => { clientView = b.dataset.v; $$('#cl-view button').forEach(x => x.classList.toggle('active', x === b)); renderClient(); }));
   // Hướng dẫn cho khách
   $('#cover-guide').addEventListener('click', () => $('#guide-modal').classList.add('open'));
@@ -1137,28 +1149,13 @@
       clientAlbum.status = 'done';
       if (!clientAlbum.selectedAt) { clientAlbum.selectedAt = Date.now(); recomputeDeadline(clientAlbum); }
       saveClient();
-    } else if (clientRemote) { clearTimeout(saveClientTimer); saveClientTimer = null; pushGuestSelection('done'); toast('Đã gửi lựa chọn về studio 🎉'); }
+    } else if (clientRemote) { clearTimeout(saveClientTimer); saveClientTimer = null; pushGuestSelection('done'); }
     $('#sum-count').textContent = sel.length;
-    $('#summary-list').innerHTML = sel.map((p, i) => `<div class="r"><span class="nm">${i + 1}. ${escapeHtml(p.name)}</span>${p.note ? `<span class="nt">${escapeHtml(p.note)}</span>` : ''}</div>`).join('');
     $('#summary-modal').classList.add('open');
   });
   function closeSum() { $('#summary-modal').classList.remove('open'); }
   $('#sum-close').addEventListener('click', closeSum);
-  $('#sum-x').addEventListener('click', closeSum);
   $('#summary-modal').addEventListener('click', e => { if (e.target.id === 'summary-modal') closeSum(); });
-  function summaryText() {
-    const sel = cSel();
-    let out = `${clientAlbum.brandName || brand.name} — Danh sách ảnh đã chọn\nAlbum: ${clientAlbum.name || ''}\nTổng: ${sel.length} ảnh\n\n`;
-    out += sel.map((p, i) => `${i + 1}. ${p.name}${p.note ? `  — ghi chú: ${p.note}` : ''}`).join('\n');
-    return out;
-  }
-  $('#sum-copy').addEventListener('click', () => copyText(summaryText(), 'Đã sao chép danh sách'));
-  $('#sum-download').addEventListener('click', () => {
-    const blob = new Blob([summaryText()], { type: 'text/plain;charset=utf-8' });
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-    a.download = `LamMien_${(clientAlbum.name || 'album').replace(/[^\w]+/g, '_')}.txt`; a.click(); URL.revokeObjectURL(a.href);
-    toast('Đã tải danh sách .txt');
-  });
 
   /* ---------- Tiến độ hậu kỳ ---------- */
   function daysLeft(deadline) {

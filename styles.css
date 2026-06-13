@@ -67,6 +67,8 @@ button, input, textarea, select { font: inherit; font-family: inherit; color: in
 .btn.sm { min-height: 34px; padding: 0 12px; font-size: 13px; border-radius: 9px; }
 .btn.block { width: 100%; }
 .btn:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+.icon-btn:disabled { opacity: .4; cursor: not-allowed; }
+.icon-btn.on { background: var(--brand); color: #fff; border-color: transparent; }
 
 .icon-btn {
   display: grid; place-items: center; width: 38px; height: 38px; border-radius: 10px;
@@ -311,8 +313,8 @@ select {
 .cover-box:hover .cover-change, .cover-change.show { opacity: 1; }
 .cover-change svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; }
 
-/* Banner ảnh bìa cho khách */
-.client-cover { position: relative; width: 100%; height: min(72vh, 680px); overflow: hidden; }
+/* Banner ảnh bìa cho khách — bo góc, thẳng lề với lưới ảnh */
+.client-cover { position: relative; width: 100%; height: min(46vh, 440px); overflow: hidden; border-radius: 18px; margin: 4px 0 18px; }
 .client-cover img { width: 100%; height: 100%; object-fit: cover; display: block; animation: coverIn 1s ease both; }
 @keyframes coverIn { from { transform: scale(1.06); } to { transform: scale(1); } }
 .cover-grad { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(10,11,14,.25) 0%, transparent 30%, rgba(10,11,14,.5) 75%, rgba(10,11,14,.92) 100%); }

@@ -187,20 +187,20 @@
     <div class="client-top">
       <div><strong id="client-brand">Lam Miên Studio</strong></div>
     </div>
-    <div class="client-cover" id="client-cover" hidden>
-      <img id="client-cover-img" alt="">
-      <div class="cover-grad"></div>
-      <div class="cover-info">
-        <h1 id="client-cover-title">Album của bạn</h1>
-        <div class="cover-stats">
-          <span id="cc-max">Bạn được chọn tối đa — ảnh</span>
-          <span id="cc-total">Tổng ảnh: 0</span>
-          <span id="cc-sel">Đã chọn: 0</span>
-        </div>
-      </div>
-      <button class="cover-guide" id="cover-guide"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 2.5-3 2.5"/><path d="M12 17h.01"/></svg>Hướng dẫn</button>
-    </div>
     <div class="client-wrap">
+      <div class="client-cover" id="client-cover" hidden>
+        <img id="client-cover-img" alt="">
+        <div class="cover-grad"></div>
+        <div class="cover-info">
+          <h1 id="client-cover-title">Album của bạn</h1>
+          <div class="cover-stats">
+            <span id="cc-max">Bạn được chọn tối đa — ảnh</span>
+            <span id="cc-total">Tổng ảnh: 0</span>
+            <span id="cc-sel">Đã chọn: 0</span>
+          </div>
+        </div>
+        <button class="cover-guide" id="cover-guide"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 2.5-3 2.5"/><path d="M12 17h.01"/></svg>Hướng dẫn</button>
+      </div>
       <div class="cbar" id="selbar">
         <div class="cbar-row1">
           <div class="ctabs" id="ctabs">
@@ -231,10 +231,9 @@
         </div>
       </div>
       <div class="tipbox">
-        <div class="tip-text"><strong>💡 Mẹo xem ảnh</strong><span>Đổi cách hiển thị bằng nút bên phải: <b>Masonry</b> giữ đúng tỷ lệ gốc mỗi ảnh, <b>Lưới</b> hiển thị đều theo khung cố định, <b>List</b> dạng danh sách.</span></div>
+        <div class="tip-text"><strong>💡 Mẹo xem ảnh</strong><span>Đổi cách hiển thị bằng nút bên phải: <b>Masonry</b> giữ đúng tỷ lệ gốc mỗi ảnh, <b>List</b> dạng danh sách.</span></div>
         <div class="seg" id="cl-view">
           <button data-v="masonry" class="active"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="3" y="15" width="7" height="6" rx="1.5"/><rect x="14" y="11" width="7" height="10" rx="1.5"/></svg>Masonry</button>
-          <button data-v="grid"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>Lưới</button>
           <button data-v="list"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>List</button>
         </div>
       </div>
@@ -328,14 +327,16 @@
   <!-- ============== SUMMARY MODAL ============== -->
   <div class="modal" id="summary-modal">
     <div class="modal-card">
-      <div class="modal-head"><h3>Bạn đã chọn <span id="sum-count">0</span> ảnh 🎉</h3><button class="icon-btn" id="sum-x"><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
-      <div class="modal-body">
-        <p class="sub" style="margin:0;color:var(--muted)">Gửi danh sách này cho Lam Miên Studio để bắt đầu xử lý ảnh.</p>
-        <div class="summary-list" id="summary-list"></div>
+      <div class="modal-body" style="text-align:center; padding:34px 26px">
+        <div style="font-size:50px; line-height:1">🎉</div>
+        <h3 style="margin:14px 0 10px; font-size:22px">Bạn đã chọn ảnh thành công!</h3>
+        <p style="margin:0 0 6px; font-size:15px; color:var(--text)">Số lượng: <b id="sum-count">0</b> ảnh</p>
+        <p style="margin:0; color:var(--muted); line-height:1.6; font-size:14px">
+          Hãy kiên nhẫn để đội ngũ Lam Miên có thể chỉnh sửa ảnh đẹp nhất.<br>
+          Cảm ơn bạn đã tin tưởng chụp ảnh tại <b style="color:var(--text)">Lam Miên Studio</b>.
+        </p>
       </div>
-      <div class="modal-foot">
-        <button class="btn ghost" type="button" id="sum-copy">Sao chép</button>
-        <button class="btn ghost" type="button" id="sum-download">Tải .txt</button>
+      <div class="modal-foot" style="justify-content:center">
         <button class="btn primary" type="button" id="sum-close">Đóng</button>
       </div>
     </div>
