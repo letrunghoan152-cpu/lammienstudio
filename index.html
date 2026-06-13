@@ -179,20 +179,29 @@
     <div class="client-wrap">
       <div class="cbar" id="selbar">
         <div class="ctabs" id="ctabs">
-          <button class="ctab active" data-f="all">Tất cả ảnh</button>
-          <button class="ctab" data-f="selected">Ảnh đã chọn</button>
-          <button class="ctab" data-f="later">Xem lại sau</button>
-          <button class="ctab" data-f="skipped">Đã bỏ qua</button>
-          <button class="ctab" data-f="unseen">Chưa xem</button>
+          <button class="ctab active" data-f="all">Tất cả ảnh <span class="cn" data-cn="all">0</span></button>
+          <button class="ctab" data-f="selected">Ảnh đã chọn <span class="cn" data-cn="selected">0</span></button>
+          <button class="ctab" data-f="later">Xem lại sau <span class="cn" data-cn="later">0</span></button>
+          <button class="ctab" data-f="skipped">Đã bỏ qua <span class="cn" data-cn="skipped">0</span></button>
+          <button class="ctab" data-f="unseen">Chưa xem <span class="cn" data-cn="unseen">0</span></button>
         </div>
-        <span class="grow"></span>
-        <div class="cmeta">
-          <span class="count-pill">Đã chọn <b id="sel-count">0</b><span id="sel-max"></span></span>
-          <div class="cprogress"><i id="progress-bar"></i></div>
+        <div class="cstatus">
+          <div class="cmeta">
+            <span class="count-pill">Bạn đã chọn <b id="sel-count">0</b><span id="sel-max"></span></span>
+            <div class="cprogress"><i id="progress-bar"></i></div>
+          </div>
+          <span class="grow"></span>
+          <button class="icon-btn" id="dl-all" title="Tải ảnh đã chọn (.zip)"><svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg></button>
+          <button class="icon-btn" id="cl-sort" title="Sắp xếp A→Z">A↕Z</button>
+          <div class="seg mini" id="cl-view">
+            <button data-v="masonry" class="active" title="Masonry"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="3" y="15" width="7" height="6" rx="1.5"/><rect x="14" y="11" width="7" height="10" rx="1.5"/></svg></button>
+            <button data-v="grid" title="Lưới"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></button>
+            <button data-v="list" title="Danh sách"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg></button>
+          </div>
+          <button class="btn primary" id="finish-btn">Gửi hậu kỳ</button>
         </div>
-        <button class="icon-btn" id="dl-all" title="Tải các ảnh đã chọn"><svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg></button>
-        <button class="btn primary" id="finish-btn">Gửi hậu kỳ</button>
       </div>
+      <div class="cfolders" id="cfolders"></div>
       <p class="cinfo" id="cinfo"></p>
       <div class="photo-grid masonry" id="photo-grid"></div>
     </div>

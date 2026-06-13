@@ -77,8 +77,13 @@
   let pickedFiles = [];
   // client picker
   let clientAlbum = null, clientBound = false, clientRemote = false, clientFilter = 'all', lbIndex = -1;
+  let clientFolder = 'goc', clientSort = 'az', clientView = 'masonry';
   let clientList = [], clientShown = 0, clientObserver = null, guestSyncTimer = null;
   const CLIENT_BATCH = 30;
+  function folderPhotos(f) {
+    if (!clientAlbum) return [];
+    return f === 'sua' ? (clientAlbum.editedPhotos || []) : clientAlbum.photos;
+  }
   function pushGuestSelection(status) {
     if (!clientRemote || !clientAlbum) return;
     const review = {};
@@ -745,10 +750,35 @@
       if (!back) { back = document.createElement('button'); back.id = 'client-back'; back.className = 'btn ghost sm'; back.textContent = '← Bảng điều khiển'; back.style.marginLeft = 'auto'; $('.client-top').appendChild(back); back.addEventListener('click', () => { saveClient(); showApp(); }); }
       back.hidden = false;
     } else if (back) { back.hidden = true; }
-    clientFilter = 'all';
+    clientFilter = 'all'; clientFolder = 'goc'; clientSort = 'az';
     $$('#ctabs .ctab').forEach(c => c.classList.toggle('active', c.dataset.f === 'all'));
+    renderFolders();
     renderClient();
     window.scrollTo({ top: 0 });
+  }
+  function renderFolders() {
+    const wrap = $('#cfolders'); if (!wrap) return;
+    const sua = (clientAlbum.editedPhotos || []).length;
+    const dl = clientAlbum.allowDownload;
+    const fdl = key => dl ? `<span class="fdl" data-fdl="${key}" title="Tải cả album (.zip)"><svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg></span>` : '';
+    let html = `<button class="cfolder${clientFolder === 'goc' ? ' active' : ''}" data-folder="goc">📂 Ảnh gốc <span class="fn">${clientAlbum.photos.length}</span>${fdl('goc')}</button>`;
+    if (sua) html += `<button class="cfolder${clientFolder === 'sua' ? ' active' : ''}" data-folder="sua">🎨 Ảnh sửa <span class="fn">${sua}</span>${fdl('sua')}</button>`;
+    wrap.innerHTML = html;
+    wrap.querySelectorAll('.cfolder').forEach(b => b.addEventListener('click', () => {
+      clientFolder = b.dataset.folder;
+      // Ảnh sửa: chỉ xem/tải, ẩn bộ lọc trạng thái + thanh chọn
+      $('#ctabs').style.display = clientFolder === 'sua' ? 'none' : '';
+      $('.cstatus .cmeta').style.visibility = clientFolder === 'sua' ? 'hidden' : '';
+      $('#finish-btn').style.display = clientFolder === 'sua' ? 'none' : '';
+      renderFolders(); renderClient();
+    }));
+    wrap.querySelectorAll('.fdl').forEach(b => b.addEventListener('click', e => {
+      e.stopPropagation();
+      if (!clientAlbum.allowDownload) { toast('Album này không cho phép tải ảnh'); return; }
+      const f = b.dataset.fdl;
+      const nm = (clientAlbum.name || 'album') + (f === 'sua' ? ' - Anh sua' : ' - Anh goc');
+      zipDownloadSet(folderPhotos(f), nm.replace(/[\\/:*?"<>|]+/g, '_'), b);
+    }));
   }
   function saveClient() {
     if (!clientAlbum) return;
@@ -770,23 +800,32 @@
     copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M5 16H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h11a1 1 0 0 1 1 1v1"/></svg>'
   };
   function buildPhotoCard(p) {
+    const editing = clientFolder === 'sua';
+    const dlAllowed = clientAlbum && clientAlbum.allowDownload;
     const card = document.createElement('figure');
-    card.className = 'pcard' + (p.review ? ' s-' + p.review : '');
+    card.className = 'pcard' + (!editing && p.review ? ' s-' + p.review : (p.review === 'selected' ? ' sel' : ''));
     card.dataset.id = p.id;
-    const dl = (clientAlbum && clientAlbum.allowDownload) ? `<button class="mini" data-a="download" title="Tải ảnh gốc">${ICN.dl}</button>` : '';
-    card.innerHTML = `
-      <div class="pcard-top"><span class="fname" title="${escapeAttr(p.name)}">${escapeHtml(p.name)}</span><button class="mini" data-a="copy" title="Chép tên ảnh">${ICN.copy}</button></div>
-      <img src="${escapeAttr(p.src)}" alt="${escapeAttr(p.name)}" loading="lazy" decoding="async">
-      <div class="pcard-acts">
-        <div class="act-icons">
-          ${dl}
-          <button class="mini${p.note ? ' on' : ''}" data-a="note" title="Ghi chú">${ICN.note}</button>
-          <button class="mini${p.review === 'later' ? ' on-amber' : ''}" data-a="later" title="Xem lại sau">${ICN.later}</button>
-          <button class="mini" data-a="skip" title="Bỏ qua">${ICN.skip}</button>
-        </div>
-        <button class="choosebtn${p.review === 'selected' ? ' on' : ''}" data-a="choose">${p.review === 'selected' ? '✓ Đã chọn' : 'Chọn ảnh'}</button>
-      </div>`;
-    card.querySelector('img').addEventListener('click', () => openLightbox(clientAlbum.photos, clientAlbum.photos.indexOf(p), 'client'));
+    const dlBtn = dlAllowed ? `<button class="mini" data-a="download" title="Tải ảnh gốc">${ICN.dl}</button>` : '';
+    if (editing) {
+      card.innerHTML = `
+        <div class="pcard-top"><span class="fname" title="${escapeAttr(p.name)}">${escapeHtml(p.name)}</span></div>
+        <img src="${escapeAttr(p.src)}" alt="${escapeAttr(p.name)}" loading="lazy" decoding="async">
+        ${dlAllowed ? `<div class="pcard-acts"><div class="act-icons">${dlBtn}</div></div>` : ''}`;
+    } else {
+      card.innerHTML = `
+        <div class="pcard-top"><span class="fname" title="${escapeAttr(p.name)}">${escapeHtml(p.name)}</span><button class="mini" data-a="copy" title="Chép tên ảnh">${ICN.copy}</button></div>
+        <img src="${escapeAttr(p.src)}" alt="${escapeAttr(p.name)}" loading="lazy" decoding="async">
+        <div class="pcard-acts">
+          <div class="act-icons">
+            ${dlBtn}
+            <button class="mini${p.note ? ' on' : ''}" data-a="note" title="Ghi chú">${ICN.note}</button>
+            <button class="mini${p.review === 'later' ? ' on-amber' : ''}" data-a="later" title="Xem lại sau">${ICN.later}</button>
+            <button class="mini" data-a="skip" title="Bỏ qua">${ICN.skip}</button>
+          </div>
+          <button class="choosebtn${p.review === 'selected' ? ' on' : ''}" data-a="choose">${p.review === 'selected' ? '✓ Đã chọn' : 'Chọn ảnh'}</button>
+        </div>`;
+    }
+    card.querySelector('img').addEventListener('click', () => openLightbox(clientList, clientList.indexOf(p), editing ? 'view' : 'client'));
     card.querySelectorAll('[data-a]').forEach(b => b.addEventListener('click', ev => {
       ev.stopPropagation();
       const a = b.dataset.a;
@@ -833,7 +872,11 @@
   function renderClient() {
     const grid = $('#photo-grid'); grid.innerHTML = '';
     if (!clientAlbum) return;
-    clientList = clientAlbum.photos.filter(passFilter);
+    grid.className = 'photo-grid ' + clientView;
+    const base = folderPhotos(clientFolder);
+    let list = (clientFolder === 'sua') ? base.slice() : base.filter(passFilter);
+    list.sort((a, b) => (clientSort === 'az' ? 1 : -1) * String(a.name).localeCompare(String(b.name), undefined, { numeric: true }));
+    clientList = list;
     clientShown = 0;
     appendClientBatch();
     setupClientSentinel();
@@ -855,14 +898,20 @@
     updateClientUI();
     if (lbIndex >= 0) syncLb();
   }
+  function setCn(k, v) { const e = document.querySelector(`#ctabs .cn[data-cn="${k}"]`); if (e) e.textContent = v; }
   function updateClientUI() {
-    const n = cSel().length;
+    const n = cSel().length, total = clientAlbum.photos.length;
     $('#sel-count').textContent = n;
     $('#sel-max').textContent = clientAlbum.maxCount ? ` / ${clientAlbum.maxCount}` : '';
-    $('#progress-bar').style.width = (clientAlbum.maxCount ? Math.min(100, n / clientAlbum.maxCount * 100) : (n / (clientAlbum.photos.length || 1) * 100)) + '%';
-    $('#cinfo').textContent = `Hiển thị ${clientList.length} ảnh · Tổng ${clientAlbum.photos.length} · Đã chọn ${n}${clientAlbum.maxCount ? '/' + clientAlbum.maxCount : ''} · Xem lại sau ${cCount('later')} · Bỏ qua ${cCount('skipped')}`;
+    $('#progress-bar').style.width = (clientAlbum.maxCount ? Math.min(100, n / clientAlbum.maxCount * 100) : (n / (total || 1) * 100)) + '%';
+    setCn('all', total); setCn('selected', n); setCn('later', cCount('later')); setCn('skipped', cCount('skipped'));
+    setCn('unseen', clientAlbum.photos.filter(p => !p.review).length);
+    const folderName = clientFolder === 'sua' ? 'Ảnh sửa' : 'Ảnh gốc';
+    $('#cinfo').textContent = `${folderName}: hiển thị ${clientList.length} ảnh${clientFolder === 'goc' ? ` · đã chọn ${n}${clientAlbum.maxCount ? '/' + clientAlbum.maxCount : ''}` : ''}`;
   }
   $$('#ctabs .ctab').forEach(c => c.addEventListener('click', () => { clientFilter = c.dataset.f; $$('#ctabs .ctab').forEach(x => x.classList.toggle('active', x === c)); renderClient(); }));
+  $('#cl-sort').addEventListener('click', () => { clientSort = clientSort === 'az' ? 'za' : 'az'; $('#cl-sort').textContent = clientSort === 'az' ? 'A→Z' : 'Z→A'; renderClient(); });
+  $$('#cl-view button').forEach(b => b.addEventListener('click', () => { clientView = b.dataset.v; $$('#cl-view button').forEach(x => x.classList.toggle('active', x === b)); renderClient(); }));
 
   /* ---------- Ghi chú ---------- */
   let noteTargetId = null;
@@ -890,9 +939,10 @@
     document.body.appendChild(a); a.click(); a.remove();
   }
   $('#dl-all').addEventListener('click', () => {
+    if (!clientAlbum.allowDownload) { toast('Album này không cho phép tải ảnh'); return; }
     const sel = cSel(); if (!sel.length) { toast('Chưa có ảnh đã chọn để tải'); return; }
-    toast(`Đang tải ${sel.length} ảnh gốc…`);
-    sel.forEach((p, i) => setTimeout(() => downloadPhoto(p), i * 900));
+    const nm = ((clientAlbum.name || 'album') + ' - Anh chon').replace(/[\\/:*?"<>|]+/g, '_');
+    zipDownloadSet(sel, nm, $('#dl-all'));
   });
 
   /* ---------- Scroll to top + tự ẩn thanh công cụ ---------- */
@@ -939,9 +989,12 @@
     $('#lb-name').textContent = p.name || '';
     preloadAround(i);
     const isClient = lbMode === 'client';
-    $('#lb-acts').hidden = !isClient;
-    $('#lb-dl').hidden = !(isClient && clientAlbum && clientAlbum.allowDownload);
+    const canDl = clientAlbum && clientAlbum.allowDownload;
+    $('#lb-acts').hidden = !(isClient || canDl);
+    $('#lb-dl').hidden = !canDl;
     $('#lb-note-btn').hidden = !(isClient && clientAlbum && clientAlbum.allowNotes);
+    $('#lb-later').hidden = !isClient;
+    $('#lb-choose').hidden = !isClient;
     if (isClient) syncLb(); else $('#lb-sub').textContent = `${i + 1} / ${lbPhotos.length} ảnh`;
     $('#lightbox').classList.add('open');
   }
