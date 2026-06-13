@@ -157,7 +157,8 @@
   function setDriveKey(k) { try { k ? localStorage.setItem(DKEY, k) : localStorage.removeItem(DKEY); } catch (_) {} }
 
   /* ---------- Auth ---------- */
-  function hideAllScreens() { $('#login-view').hidden = true; $('#app').hidden = true; $('#client').hidden = true; const ce = $('#client-error'); if (ce) ce.hidden = true; }
+  function hideAllScreens() { $('#login-view').hidden = true; $('#app').hidden = true; $('#client').hidden = true; const ce = $('#client-error'); if (ce) ce.hidden = true; const cl = $('#client-loading'); if (cl) cl.hidden = true; }
+  function showClientLoading() { hideAllScreens(); $('#client-loading').hidden = false; }
   function showLogin() { hideAllScreens(); $('#login-view').hidden = false; }
   function showClientError(msg) {
     hideAllScreens(); $('#client-error').hidden = false;
@@ -255,7 +256,7 @@
       const url = new URL('https://www.googleapis.com/drive/v3/files');
       url.searchParams.set('q', `'${folderId}' in parents and mimeType contains 'image/' and trashed=false`);
       url.searchParams.set('key', apiKey);
-      url.searchParams.set('fields', 'nextPageToken, files(id,name,mimeType)');
+      url.searchParams.set('fields', 'nextPageToken, files(id,name,mimeType,imageMediaMetadata(width,height))');
       url.searchParams.set('pageSize', '1000');
       url.searchParams.set('orderBy', 'name_natural');
       url.searchParams.set('supportsAllDrives', 'true');
@@ -275,7 +276,10 @@
     if (!apiKey) throw new Error('Chưa nhập Google Drive API Key (mục “Tài khoản NAS”).');
     const files = await listDriveFolder(fid, apiKey);
     if (!files.length) throw new Error('Thư mục trống hoặc chưa chia sẻ “Bất kỳ ai có đường liên kết”.');
-    return files.map((f, i) => ({ id: 'd' + i, name: f.name, driveId: f.id, src: driveThumb(f.id, 'w400'), full: driveThumb(f.id, 'w1600'), selected: false, note: '' }));
+    return files.map((f, i) => {
+      const md = f.imageMediaMetadata || {};
+      return { id: 'd' + i, name: f.name, driveId: f.id, w: md.width || 0, h: md.height || 0, src: driveThumb(f.id, 'w400'), full: driveThumb(f.id, 'w1600'), selected: false, note: '' };
+    });
   }
   const DEMO = ['photo-1519741497674-611481863552','photo-1520854221256-17451cc331bf','photo-1511285560929-80b456fea0bc','photo-1519225421980-715cb0215aed','photo-1465495976277-4387d4b0b4c6','photo-1525258946800-98cfd641d0de','photo-1606216794074-735e91aa2c92','photo-1583939003579-730e3918a45a','photo-1591604466107-ec97de577aff','photo-1537633552985-df8429e8048b']
     .map((id, i) => ({ name: `LMS_${String(i + 1).padStart(4, '0')}.jpg`, src: `https://images.unsplash.com/${id}?auto=format&fit=crop&w=600&q=75` }));
@@ -858,6 +862,13 @@
         </div>`;
     }
     const im = card.querySelector('img');
+    // Giữ chỗ đúng tỉ lệ ảnh (chống nhảy layout) + khung skeleton mờ -> ảnh fade vào
+    if (clientView !== 'list') {
+      im.style.aspectRatio = (p.w && p.h) ? `${p.w} / ${p.h}` : '4 / 5';
+      card.classList.add('skel');
+      const markLoaded = () => { im.classList.add('loaded'); card.classList.remove('skel'); };
+      if (im.complete && im.naturalWidth) markLoaded(); else im.addEventListener('load', markLoaded, { once: false });
+    } else { im.classList.add('loaded'); }
     im.addEventListener('click', () => openLightbox(clientList, clientList.indexOf(p), editing ? 'view' : 'client'));
     attachImgFallback(im, p);
     card.querySelectorAll('[data-a]').forEach(b => b.addEventListener('click', ev => {
@@ -1238,6 +1249,7 @@
 
     const hasShareRef = new URLSearchParams(location.search).get('al') || location.hash.match(/[#&]a=/);
     if (hasShareRef) {
+      showClientLoading();   // hiện ngay, tránh nháy trang đăng nhập
       const shared = await resolveSharedAlbum();
       if (shared && shared.album) {
         openClient(shared.album, shared.bound, shared.remote);

@@ -125,6 +125,8 @@ select {
 .login-card .field + .field { margin-top: 14px; }
 .login-card .btn { margin-top: 20px; }
 .login-note { margin-top: 16px; font-size: 12px; color: var(--muted-2); text-align: center; line-height: 1.5; }
+.spinner { width: 42px; height: 42px; margin: 0 auto; border-radius: 50%; border: 3px solid var(--line); border-top-color: var(--brand); animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 
 /* ============ App shell ============ */
 .app-shell { display: grid; grid-template-columns: 248px 1fr; min-height: 100vh; }
@@ -435,8 +437,12 @@ select {
 
 /* ===== Lưới ảnh — 3 chế độ ===== */
 .pcard { position: relative; border-radius: 12px; overflow: hidden; background: #16181e; border: 2px solid transparent; transition: border-color .2s ease, box-shadow .2s ease; }
-.pcard img { width: 100%; height: auto; display: block; cursor: zoom-in; transition: transform .25s ease; }
+.pcard img { width: 100%; height: auto; display: block; cursor: zoom-in; opacity: 0; transition: opacity .45s ease, transform .25s ease; }
+.pcard img.loaded { opacity: 1; }
 .pcard:hover img { transform: scale(1.015); }
+/* khung skeleton mờ trong lúc ảnh tải */
+.pcard.skel { background: linear-gradient(100deg, #14161b 28%, #232831 50%, #14161b 72%); background-size: 200% 100%; animation: shimmer 1.3s ease-in-out infinite; }
+@keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 .pcard.s-selected { box-shadow: 0 0 0 1px var(--brand), 0 6px 20px rgba(124,92,252,.28); }
 /* Masonry */
 .photo-grid.masonry { column-count: 4; column-gap: 8px; }
