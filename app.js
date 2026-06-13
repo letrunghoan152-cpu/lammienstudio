@@ -77,9 +77,16 @@
   let pickedFiles = [];
   // client picker
   let clientAlbum = null, clientBound = false, clientRemote = false, clientFilter = 'all', lbIndex = -1;
-  let clientFolder = 'goc', clientSort = 'az', clientView = 'masonry';
+  let clientFolder = 'goc', clientSort = 'az', clientView = 'masonry', clientPage = 0;
   let clientList = [], clientShown = 0, clientObserver = null, guestSyncTimer = null;
-  const CLIENT_BATCH = 30;
+  const CLIENT_BATCH = 30, CLIENT_PAGE = 100;
+  const FILTER_DESC = {
+    all: 'Hiển thị tất cả ảnh, gồm ảnh đã chọn, ảnh xem lại sau, ảnh đã bỏ qua và ảnh chưa xem.',
+    selected: 'Những ảnh bạn đã chọn để gửi hậu kỳ.',
+    later: 'Những ảnh bạn đánh dấu xem lại sau.',
+    skipped: 'Những ảnh bạn đã bỏ qua.',
+    unseen: 'Những ảnh bạn chưa quyết định.'
+  };
   function folderPhotos(f) {
     if (!clientAlbum) return [];
     return f === 'sua' ? (clientAlbum.editedPhotos || []) : clientAlbum.photos;
@@ -759,7 +766,6 @@
     if (cov) {
       $('#client-cover-img').src = cov;
       $('#client-cover-title').textContent = al.name || welcome;   // mã KH
-      $('#client-cover-sub').textContent = brandName;
     }
     // nút quay lại (chỉ khi xem trước từ dashboard)
     let back = $('#client-back');
@@ -767,11 +773,10 @@
       if (!back) { back = document.createElement('button'); back.id = 'client-back'; back.className = 'btn ghost sm'; back.textContent = '← Bảng điều khiển'; back.style.marginLeft = 'auto'; $('.client-top').appendChild(back); back.addEventListener('click', () => { saveClient(); showApp(); }); }
       back.hidden = false;
     } else if (back) { back.hidden = true; }
-    clientFilter = 'all'; clientFolder = 'goc'; clientSort = 'az'; clientView = 'masonry';
+    clientFilter = 'all'; clientFolder = 'goc'; clientSort = 'az'; clientView = 'masonry'; clientPage = 0;
     $$('#ctabs .ctab').forEach(c => c.classList.toggle('active', c.dataset.f === 'all'));
-    $('#cl-sort').textContent = 'A→Z';
     $$('#cl-view button').forEach(x => x.classList.toggle('active', x.dataset.v === 'masonry'));
-    $('#ctabs').style.display = ''; $('.cstatus .cmeta').style.visibility = ''; $('#finish-btn').style.display = '';
+    $('#ctabs').style.display = ''; $('.cmeta').style.visibility = ''; $('#dl-all').style.display = ''; $('#finish-btn').style.display = '';
     renderFolders();
     renderClient();
     window.scrollTo({ top: 0 });
@@ -785,10 +790,11 @@
     if (sua) html += `<button class="cfolder${clientFolder === 'sua' ? ' active' : ''}" data-folder="sua">🎨 Ảnh sửa <span class="fn">${sua}</span>${fdl('sua')}</button>`;
     wrap.innerHTML = html;
     wrap.querySelectorAll('.cfolder').forEach(b => b.addEventListener('click', () => {
-      clientFolder = b.dataset.folder;
+      clientFolder = b.dataset.folder; clientPage = 0;
       // Ảnh sửa: chỉ xem/tải, ẩn bộ lọc trạng thái + thanh chọn
       $('#ctabs').style.display = clientFolder === 'sua' ? 'none' : '';
-      $('.cstatus .cmeta').style.visibility = clientFolder === 'sua' ? 'hidden' : '';
+      $('.cmeta').style.visibility = clientFolder === 'sua' ? 'hidden' : '';
+      $('#dl-all').style.display = clientFolder === 'sua' ? 'none' : '';
       $('#finish-btn').style.display = clientFolder === 'sua' ? 'none' : '';
       renderFolders(); renderClient();
     }));
@@ -905,7 +911,6 @@
     let list = (clientFolder === 'sua') ? base.slice() : base.filter(passFilter);
     list.sort((a, b) => (clientSort === 'az' ? 1 : -1) * String(a.name).localeCompare(String(b.name), undefined, { numeric: true }));
     clientList = list;
-    clientShown = 0;
     if (!list.length) {
       const labels = { all: 'Chưa có ảnh nào trong album.', selected: 'Bạn chưa chọn ảnh nào.', later: 'Chưa có ảnh nào để xem lại sau.', skipped: 'Chưa bỏ qua ảnh nào.', unseen: 'Bạn đã xem hết ảnh rồi 🎉' };
       grid.className = 'photo-grid';
@@ -913,10 +918,26 @@
       updateClientUI();
       return;
     }
-    appendClientBatch();
-    setupClientSentinel();
+    const pages = Math.max(1, Math.ceil(list.length / CLIENT_PAGE));
+    if (clientPage >= pages) clientPage = pages - 1;
+    if (clientPage < 0) clientPage = 0;
+    const start = clientPage * CLIENT_PAGE, end = Math.min(start + CLIENT_PAGE, list.length);
+    const frag = document.createDocumentFragment();
+    for (let i = start; i < end; i++) frag.appendChild(buildPhotoCard(list[i]));
+    grid.appendChild(frag);
+    // chạy lại animation fade
+    grid.style.animation = 'none'; void grid.offsetWidth; grid.style.animation = '';
     updateClientUI();
   }
+  function gotoClientPage(d) {
+    const pages = Math.max(1, Math.ceil(clientList.length / CLIENT_PAGE));
+    const np = Math.min(pages - 1, Math.max(0, clientPage + d));
+    if (np === clientPage) return;
+    clientPage = np; renderClient();
+    const wrap = $('.client-wrap'); if (wrap) window.scrollTo({ top: wrap.offsetTop - 70, behavior: 'smooth' });
+  }
+  $('#cpage-prev').addEventListener('click', () => gotoClientPage(-1));
+  $('#cpage-next').addEventListener('click', () => gotoClientPage(1));
   // Cập nhật trạng thái 1 thẻ tại chỗ (không dựng lại DOM -> mượt, không reflow)
   function updateCardState(p) {
     const card = $('#photo-grid').querySelector(`.pcard[data-id="${p.id}"]`);
@@ -943,20 +964,34 @@
     updateClientUI();
     if (lbIndex >= 0) syncLb();
   }
-  function setCn(k, v) { const e = document.querySelector(`#ctabs .cn[data-cn="${k}"]`); if (e) e.textContent = v; }
   function updateClientUI() {
-    const n = cSel().length, total = clientAlbum.photos.length;
+    const n = cSel().length, total = clientAlbum.photos.length, max = clientAlbum.maxCount;
     $('#sel-count').textContent = n;
-    $('#sel-max').textContent = clientAlbum.maxCount ? ` / ${clientAlbum.maxCount}` : '';
-    $('#progress-bar').style.width = (clientAlbum.maxCount ? Math.min(100, n / clientAlbum.maxCount * 100) : (n / (total || 1) * 100)) + '%';
-    setCn('all', total); setCn('selected', n); setCn('later', cCount('later')); setCn('skipped', cCount('skipped'));
-    setCn('unseen', clientAlbum.photos.filter(p => !p.review).length);
-    const folderName = clientFolder === 'sua' ? 'Ảnh sửa' : 'Ảnh gốc';
-    $('#cinfo').textContent = `${folderName}: hiển thị ${clientList.length} ảnh${clientFolder === 'goc' ? ` · đã chọn ${n}${clientAlbum.maxCount ? '/' + clientAlbum.maxCount : ''}` : ''}`;
+    $('#sel-max').textContent = max ? ` / ${max}` : '';
+    $('#progress-bar').style.width = (max ? Math.min(100, n / max * 100) : (n / (total || 1) * 100)) + '%';
+    // cover thông số
+    $('#cc-max').textContent = max ? `Bạn được chọn tối đa ${max} ảnh` : 'Bạn có thể chọn không giới hạn';
+    $('#cc-total').textContent = `Tổng ảnh: ${total}`;
+    $('#cc-sel').textContent = `Đã chọn: ${n}${max ? ` / ${max}` : ''}`;
+    // mô tả theo tab
+    $('#cbar-desc').textContent = clientFolder === 'sua' ? 'Ảnh đã chỉnh sửa — xem và tải về.' : (FILTER_DESC[clientFilter] || '');
+    // phân trang
+    const len = clientList.length, pages = Math.max(1, Math.ceil(len / CLIENT_PAGE));
+    const start = len ? clientPage * CLIENT_PAGE + 1 : 0, end = Math.min((clientPage + 1) * CLIENT_PAGE, len);
+    $('#cpage-info').textContent = `Ảnh ${start} - ${end}, Tổng ${len}`;
+    $('#cpage-cur').textContent = `Trang ${clientPage + 1}/${pages}`;
+    $('#cpage-prev').disabled = clientPage <= 0;
+    $('#cpage-next').disabled = clientPage >= pages - 1;
+    $('.cbar-row3').style.display = pages > 1 ? '' : (len > CLIENT_PAGE ? '' : '');
   }
-  $$('#ctabs .ctab').forEach(c => c.addEventListener('click', () => { clientFilter = c.dataset.f; $$('#ctabs .ctab').forEach(x => x.classList.toggle('active', x === c)); renderClient(); }));
-  $('#cl-sort').addEventListener('click', () => { clientSort = clientSort === 'az' ? 'za' : 'az'; $('#cl-sort').textContent = clientSort === 'az' ? 'A→Z' : 'Z→A'; renderClient(); });
+  $$('#ctabs .ctab').forEach(c => c.addEventListener('click', () => { clientFilter = c.dataset.f; clientPage = 0; $$('#ctabs .ctab').forEach(x => x.classList.toggle('active', x === c)); renderClient(); }));
+  $('#cl-sort').addEventListener('click', () => { clientSort = clientSort === 'az' ? 'za' : 'az'; $('#cl-sort').title = clientSort === 'az' ? 'Sắp xếp A→Z' : 'Sắp xếp Z→A'; renderClient(); });
   $$('#cl-view button').forEach(b => b.addEventListener('click', () => { clientView = b.dataset.v; $$('#cl-view button').forEach(x => x.classList.toggle('active', x === b)); renderClient(); }));
+  // Hướng dẫn cho khách
+  $('#cover-guide').addEventListener('click', () => $('#guide-modal').classList.add('open'));
+  $('#guide-x').addEventListener('click', () => $('#guide-modal').classList.remove('open'));
+  $('#guide-ok').addEventListener('click', () => $('#guide-modal').classList.remove('open'));
+  $('#guide-modal').addEventListener('click', e => { if (e.target.id === 'guide-modal') $('#guide-modal').classList.remove('open'); });
 
   /* ---------- Ghi chú ---------- */
   let noteTargetId = null;

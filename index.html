@@ -181,39 +181,56 @@
     </div>
     <div class="client-cover" id="client-cover" hidden>
       <img id="client-cover-img" alt="">
-      <div class="cover-overlay">
-        <h1 id="client-cover-title">Album của bạn đã sẵn sàng</h1>
-        <p id="client-cover-sub">Lam Miên Studio</p>
-        <span class="scroll-hint">Lướt xuống để bắt đầu chọn ảnh ⌄</span>
+      <div class="cover-grad"></div>
+      <div class="cover-info">
+        <h1 id="client-cover-title">Album của bạn</h1>
+        <div class="cover-stats">
+          <span id="cc-max">Bạn được chọn tối đa — ảnh</span>
+          <span id="cc-total">Tổng ảnh: 0</span>
+          <span id="cc-sel">Đã chọn: 0</span>
+        </div>
       </div>
+      <button class="cover-guide" id="cover-guide"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 2.5-3 2.5"/><path d="M12 17h.01"/></svg>Hướng dẫn</button>
     </div>
     <div class="client-wrap">
       <div class="cbar" id="selbar">
-        <div class="ctabs" id="ctabs">
-          <button class="ctab active" data-f="all">Tất cả ảnh <span class="cn" data-cn="all">0</span></button>
-          <button class="ctab" data-f="selected">Ảnh đã chọn <span class="cn" data-cn="selected">0</span></button>
-          <button class="ctab" data-f="later">Xem lại sau <span class="cn" data-cn="later">0</span></button>
-          <button class="ctab" data-f="skipped">Đã bỏ qua <span class="cn" data-cn="skipped">0</span></button>
-          <button class="ctab" data-f="unseen">Chưa xem <span class="cn" data-cn="unseen">0</span></button>
-        </div>
-        <div class="cstatus">
+        <div class="cbar-row1">
+          <div class="ctabs" id="ctabs">
+            <button class="ctab active" data-f="all">Tất cả ảnh</button>
+            <button class="ctab" data-f="selected">Ảnh bạn đã chọn</button>
+            <button class="ctab" data-f="later">Ảnh xem lại sau</button>
+            <button class="ctab" data-f="skipped">Ảnh đã bỏ qua</button>
+            <button class="ctab" data-f="unseen">Ảnh chưa xem</button>
+          </div>
+          <span class="grow"></span>
           <div class="cmeta">
             <span class="count-pill">Bạn đã chọn <b id="sel-count">0</b><span id="sel-max"></span></span>
             <div class="cprogress"><i id="progress-bar"></i></div>
           </div>
-          <span class="grow"></span>
           <button class="icon-btn" id="dl-all" title="Tải ảnh đã chọn (.zip)"><svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg></button>
-          <button class="icon-btn" id="cl-sort" title="Sắp xếp A→Z">A↕Z</button>
-          <div class="seg mini" id="cl-view">
-            <button data-v="masonry" class="active" title="Masonry"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="3" y="15" width="7" height="6" rx="1.5"/><rect x="14" y="11" width="7" height="10" rx="1.5"/></svg></button>
-            <button data-v="grid" title="Lưới"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></button>
-            <button data-v="list" title="Danh sách"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg></button>
-          </div>
+          <button class="icon-btn" id="cl-sort" title="Sắp xếp A→Z"><svg viewBox="0 0 24 24"><path d="M7 4v16M7 20l-3-3M7 4l3 3M17 20V4M17 4l-3 3M17 20l3-3"/></svg></button>
           <button class="btn primary" id="finish-btn">Gửi hậu kỳ</button>
+        </div>
+        <p class="cbar-desc" id="cbar-desc">Hiển thị tất cả ảnh, gồm ảnh đã chọn, ảnh xem lại sau, ảnh đã bỏ qua và ảnh chưa xem.</p>
+        <div class="cbar-row3">
+          <span id="cpage-info">Ảnh 1 - 0, Tổng 0</span>
+          <span class="grow"></span>
+          <div class="cpager">
+            <button class="icon-btn" id="cpage-prev" title="Trang trước"><svg viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></button>
+            <span id="cpage-cur">Trang 1/1</span>
+            <button class="icon-btn" id="cpage-next" title="Trang sau"><svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></button>
+          </div>
+        </div>
+      </div>
+      <div class="tipbox">
+        <div class="tip-text"><strong>💡 Mẹo xem ảnh</strong><span>Đổi cách hiển thị bằng nút bên phải: <b>Masonry</b> giữ đúng tỷ lệ gốc mỗi ảnh, <b>Lưới</b> hiển thị đều theo khung cố định, <b>List</b> dạng danh sách.</span></div>
+        <div class="seg" id="cl-view">
+          <button data-v="masonry" class="active"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="3" y="15" width="7" height="6" rx="1.5"/><rect x="14" y="11" width="7" height="10" rx="1.5"/></svg>Masonry</button>
+          <button data-v="grid"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>Lưới</button>
+          <button data-v="list"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>List</button>
         </div>
       </div>
       <div class="cfolders" id="cfolders"></div>
-      <p class="cinfo" id="cinfo"></p>
       <div class="photo-grid masonry" id="photo-grid"></div>
     </div>
     <button class="scroll-top" id="scroll-top" title="Lên đầu trang"><svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
@@ -328,6 +345,20 @@
         <button class="btn ghost" type="button" id="note-cancel">Đóng</button>
         <button class="btn primary" type="button" id="note-save">Lưu ghi chú</button>
       </div>
+    </div>
+  </div>
+
+  <!-- ============== GUIDE MODAL (khách) ============== -->
+  <div class="modal" id="guide-modal">
+    <div class="modal-card">
+      <div class="modal-head"><h3>Hướng dẫn chọn ảnh</h3><button class="icon-btn" id="guide-x"><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+      <div class="modal-body">
+        <div class="guide-step"><span class="gn">1</span><div><strong>Xem ảnh</strong><p>Nhấn vào ảnh để xem lớn, vuốt hoặc dùng ◀ ▶ để lướt. Đổi cách hiển thị: Masonry / Lưới / List.</p></div></div>
+        <div class="guide-step"><span class="gn">2</span><div><strong>Chọn ảnh</strong><p>Bấm <b>Chọn ảnh</b> trên tấm bạn thích. Có thể <b>Xem lại sau</b> hoặc <b>Bỏ qua</b>; lọc nhanh bằng các tab phía trên.</p></div></div>
+        <div class="guide-step"><span class="gn">3</span><div><strong>Ghi chú</strong><p>Bấm biểu tượng bút để ghi yêu cầu chỉnh sửa cho từng ảnh (vd: chỉnh sáng, xoá mụn…).</p></div></div>
+        <div class="guide-step"><span class="gn">4</span><div><strong>Gửi hậu kỳ</strong><p>Chọn đủ ảnh rồi bấm <b>Gửi hậu kỳ</b> để gửi lựa chọn về studio. Bạn vẫn có thể tải ảnh nếu studio cho phép.</p></div></div>
+      </div>
+      <div class="modal-foot"><button class="btn primary" type="button" id="guide-ok">Đã hiểu</button></div>
     </div>
   </div>
 
