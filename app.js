@@ -346,7 +346,7 @@
     const card = document.createElement('div');
     card.className = 'acard';
     card.innerHTML = `
-      <div class="acard-cover">${cover ? `<img src="${escapeAttr(cover)}" alt="" loading="lazy">` : '🖼️'}</div>
+      <div class="acard-cover">${cover ? `<img src="${escapeAttr(cover)}" alt="" loading="lazy">` : '<span class="ph">🖼️</span>'}</div>
       <div class="acard-body">
         <div class="acard-top">
           <div class="status">
@@ -1076,14 +1076,16 @@
     row.className = 'prog-row';
     row.innerHTML = `
       <div class="who" title="Mở album"><strong>${escapeHtml(al.name)}</strong><small>${al.client ? escapeHtml(al.client) : '—'}${hourTxt} · ${chotTxt}</small></div>
-      <input type="date" data-f="shoot" value="${escapeAttr(al.shootDate || '')}">
-      <div class="dl-cell">
-        <input type="number" min="0" step="1" data-f="days" value="${al.deadlineDays || ''}" placeholder="số ngày">
-        <small>${al.deadline ? '→ ' + fmtVN(al.deadline) : (al.selectedAt ? 'nhập số ngày' : 'tính khi khách gửi hậu kỳ')}</small>
-      </div>
-      <select data-f="status">${STATUSES.map(s => `<option value="${s.key}"${s.key === al.status ? ' selected' : ''}>${s.label}</option>`).join('')}</select>
-      <span class="deadline-badge ${bd.cls}"><span class="dot"></span>${bd.txt}</span>
-      <button class="icon-btn" data-f="link" title="Copy link gửi khách"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg></button>`;
+      <label class="pf" data-l="Ngày chụp"><input type="date" data-f="shoot" value="${escapeAttr(al.shootDate || '')}"></label>
+      <label class="pf" data-l="Hạn trả (số ngày)">
+        <div class="dl-cell">
+          <input type="number" min="0" step="1" data-f="days" value="${al.deadlineDays || ''}" placeholder="số ngày">
+          <small>${al.deadline ? '→ ' + fmtVN(al.deadline) : (al.selectedAt ? 'nhập số ngày' : 'tính khi khách gửi hậu kỳ')}</small>
+        </div>
+      </label>
+      <label class="pf" data-l="Trạng thái"><select data-f="status">${STATUSES.map(s => `<option value="${s.key}"${s.key === al.status ? ' selected' : ''}>${s.label}</option>`).join('')}</select></label>
+      <div class="pf badge-cell" data-l="Deadline"><span class="deadline-badge ${bd.cls}"><span class="dot"></span>${bd.txt}</span></div>
+      <button class="icon-btn lnk" data-f="link" title="Copy link gửi khách"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg></button>`;
     row.querySelector('.who').addEventListener('click', () => openAlbumDetail(al.id));
     row.querySelector('[data-f="link"]').addEventListener('click', () => copyAlbumLink(al));
     row.querySelector('[data-f="shoot"]').addEventListener('change', e => { al.shootDate = e.target.value; al.lastActivity = Date.now(); saveAlbums(al); renderProgress(); });
