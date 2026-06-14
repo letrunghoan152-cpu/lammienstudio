@@ -1094,22 +1094,49 @@
   $('#guide-ok').addEventListener('click', () => $('#guide-modal').classList.remove('open'));
   $('#guide-modal').addEventListener('click', e => { if (e.target.id === 'guide-modal') $('#guide-modal').classList.remove('open'); });
 
-  /* ---------- Ghi chú ---------- */
-  let noteTargetId = null;
-  function openNote(id) {
-    const p = clientAlbum.photos.find(x => x.id === id); if (!p) return;
-    noteTargetId = id; $('#note-photo-name').textContent = p.name || '';
+  /* ---------- Ghi chú (dùng chung khách + hậu kỳ) ---------- */
+  let notePhoto = null, notePersist = null;
+  function persistCurrent() {
+    if (lbMode === 'view' && detailAlbum) { detailAlbum.lastActivity = Date.now(); saveAlbums(detailAlbum); }
+    else saveClient();
+  }
+  function openNoteFor(p, persistFn) {
+    if (!p) return;
+    notePhoto = p; notePersist = persistFn || persistCurrent;
+    $('#note-photo-name').textContent = p.name || '';
     $('#note-text').value = p.note || ''; $('#note-modal').classList.add('open');
     setTimeout(() => $('#note-text').focus(), 50);
   }
-  function closeNote() { $('#note-modal').classList.remove('open'); noteTargetId = null; }
+  function openNote(id) { const p = clientAlbum && clientAlbum.photos.find(x => x.id === id); openNoteFor(p, saveClient); }
+  function closeNote() { $('#note-modal').classList.remove('open'); notePhoto = null; }
   $('#note-x').addEventListener('click', closeNote);
   $('#note-cancel').addEventListener('click', closeNote);
   $('#note-modal').addEventListener('click', e => { if (e.target.id === 'note-modal') closeNote(); });
   $('#note-save').addEventListener('click', () => {
-    const p = clientAlbum && clientAlbum.photos.find(x => x.id === noteTargetId);
-    if (p) { p.note = $('#note-text').value.trim(); saveClient(); updateCardState(p); if (lbIndex >= 0) syncLb(); toast('Đã lưu ghi chú'); }
+    if (notePhoto) {
+      notePhoto.note = $('#note-text').value.trim();
+      (notePersist || persistCurrent)();
+      if (clientAlbum) updateCardState(notePhoto);
+      if (lbIndex >= 0) syncLb();
+      if (typeof renderDetail === 'function' && detailAlbum && lbMode === 'view') renderDetail();
+      toast('Đã lưu ghi chú');
+    }
     closeNote();
+  });
+  // Khung ghi chú trên ảnh trong lightbox
+  function renderLbNote() {
+    const p = lbPhotos[lbIndex], box = $('#lb-note-box');
+    if (!box) return;
+    if (p && p.note) { $('#lb-note-text').textContent = p.note; box.hidden = false; }
+    else box.hidden = true;
+  }
+  $('#lb-note-edit').addEventListener('click', () => { if (lbIndex >= 0) openNoteFor(lbPhotos[lbIndex], persistCurrent); });
+  $('#lb-note-del').addEventListener('click', () => {
+    const p = lbPhotos[lbIndex]; if (!p) return;
+    if (!window.confirm('Xoá ghi chú của ảnh này?')) return;
+    p.note = ''; persistCurrent(); if (clientAlbum) updateCardState(p);
+    if (detailAlbum && lbMode === 'view') renderDetail();
+    renderLbNote(); toast('Đã xoá ghi chú');
   });
 
   /* ---------- Tải ảnh gốc từ Drive ---------- */
@@ -1171,13 +1198,16 @@
     $('#lb-name').textContent = p.name || '';
     preloadAround(i);
     const isClient = lbMode === 'client';
+    const isStudio = lbMode === 'view' && !!detailAlbum;
     const canDl = clientAlbum && clientAlbum.allowDownload;
-    $('#lb-acts').hidden = !(isClient || canDl);
+    const canNote = (isClient && clientAlbum && clientAlbum.allowNotes) || isStudio;
+    $('#lb-acts').hidden = !(isClient || canDl || canNote);
     $('#lb-dl').hidden = !canDl;
-    $('#lb-note-btn').hidden = !(isClient && clientAlbum && clientAlbum.allowNotes);
+    $('#lb-note-btn').hidden = !canNote;
     $('#lb-later').hidden = !isClient;
     $('#lb-choose').hidden = !isClient;
     syncLb();
+    renderLbNote();
     $('#lightbox').classList.add('open');
   }
   function closeLb() { $('#lightbox').classList.remove('open'); lbIndex = -1; }
@@ -1201,7 +1231,7 @@
   $('#lb-next').addEventListener('click', () => lbStep(1));
   $('#lb-choose').addEventListener('click', () => { if (lbMode === 'client' && lbIndex >= 0) setReview(lbPhotos[lbIndex].id, 'selected'); });
   $('#lb-later').addEventListener('click', () => { if (lbMode === 'client' && lbIndex >= 0) setReview(lbPhotos[lbIndex].id, 'later'); });
-  $('#lb-note-btn').addEventListener('click', () => { if (lbMode === 'client' && lbIndex >= 0) openNote(lbPhotos[lbIndex].id); });
+  $('#lb-note-btn').addEventListener('click', () => { if (lbIndex >= 0) openNoteFor(lbPhotos[lbIndex], persistCurrent); });
   $('#lb-dl').addEventListener('click', () => { if (lbIndex >= 0) downloadPhoto(lbPhotos[lbIndex]); });
   $('#lb-copy').addEventListener('click', () => { if (lbIndex >= 0) copyText(lbPhotos[lbIndex].name, 'Đã chép tên ảnh'); });
   $('#lightbox').addEventListener('click', e => { if (e.target.id === 'lightbox') closeLb(); });
