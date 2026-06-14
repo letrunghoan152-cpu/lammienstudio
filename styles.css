@@ -36,16 +36,16 @@
 }
 :root[data-theme="light"] {
   color-scheme: light;
-  --bg: #ece3cf;
-  --bg-2: #f4eddc;
-  --panel: #fbf7ed;
-  --panel-2: #f2ebd9;
-  --panel-3: #e8ddc4;
-  --line: #d9cdb0;
-  --line-soft: #e7ddc7;
-  --text: #232a1c;
-  --muted: #6e7860;
-  --muted-2: #8e9579;
+  --bg: #f5f6f4;
+  --bg-2: #ffffff;
+  --panel: #ffffff;
+  --panel-2: #f4f5f2;
+  --panel-3: #eaece7;
+  --line: #e3e6e0;
+  --line-soft: #eef0ec;
+  --text: #1f2418;
+  --muted: #5f6857;
+  --muted-2: #8b9282;
   --brand: #6d8150;          /* olive đậm hơn cho nền sáng */
   --brand-600: #5c6e43;      /* hover tối hơn */
   --brand-700: #4d5c38;
