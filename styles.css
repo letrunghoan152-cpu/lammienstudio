@@ -387,7 +387,7 @@ img.logo { object-fit: contain; background: #efece5; padding: 2px; }
 @keyframes coverIn { from { transform: scale(1.06); } to { transform: scale(1); } }
 .cover-grad { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(10,11,14,.25) 0%, transparent 30%, rgba(10,11,14,.5) 75%, rgba(10,11,14,.92) 100%); }
 .cover-info { position: absolute; left: clamp(18px, 4vw, 56px); bottom: clamp(22px, 4vw, 48px); z-index: 1; max-width: 80%; }
-.cover-info h1 { margin: 0 0 8px; font-size: clamp(30px, 5vw, 60px); font-weight: 800; line-height: 1.05; text-shadow: 0 2px 24px rgba(0,0,0,.5); }
+.cover-info h1 { margin: 0 0 8px; font-size: clamp(30px, 5vw, 60px); font-weight: 800; line-height: 1.05; color: #fff; text-shadow: 0 2px 24px rgba(0,0,0,.5); }
 .cover-stats { display: flex; flex-direction: column; gap: 2px; color: rgba(255,255,255,.82); font-size: 15px; }
 .cover-stats #cc-sel { color: #fff; font-weight: 700; }
 .cover-guide { position: absolute; right: clamp(18px, 4vw, 48px); bottom: clamp(22px, 4vw, 48px); z-index: 1; display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: 99px; border: 0; cursor: pointer; background: rgba(0,0,0,.45); color: #fff; font-weight: 600; font-size: 14px; backdrop-filter: blur(8px); transition: background .15s, transform .1s; }
