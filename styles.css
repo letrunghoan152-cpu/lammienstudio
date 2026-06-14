@@ -381,6 +381,18 @@ img.logo { object-fit: contain; background: #efece5; padding: 2px; }
 .cover-change { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 8px; background: rgba(0,0,0,.4); color: #fff; border: 0; cursor: pointer; opacity: 0; transition: opacity .15s; font-weight: 600; font-size: 13px; }
 .cover-box:hover .cover-change, .cover-change.show { opacity: 1; }
 .cover-change svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; }
+/* popup đổi ảnh bìa */
+.cover-pick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 8px; max-height: 52vh; overflow: auto; }
+.cover-pick-grid img { width: 100%; aspect-ratio: 1/1; object-fit: cover; border-radius: 8px; cursor: pointer; border: 2px solid transparent; transition: border-color .15s, transform .1s; }
+.cover-pick-grid img:hover { border-color: var(--brand); transform: scale(1.03); }
+.crop-frame { width: 100%; max-width: 460px; margin: 0 auto; aspect-ratio: 16/10; border-radius: 12px; background-size: cover; background-position: 50% 50%; background-repeat: no-repeat; cursor: grab; border: 1px solid var(--line); touch-action: none; user-select: none; }
+.crop-frame:active { cursor: grabbing; }
+/* nút phụ trong set row (rename/xoá) */
+.set-edit, .set-del { flex: none; width: 26px; height: 26px; border-radius: 6px; border: 0; cursor: pointer; background: var(--panel-2); color: var(--muted); display: grid; place-items: center; }
+.set-item:hover .set-edit, .set-item:hover .set-del { background: var(--panel); }
+.set-edit:hover { background: var(--brand) !important; color: #fff; }
+.set-del:hover { background: #c0503f !important; color: #fff; }
+.set-edit svg, .set-del svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2; }
 
 /* Banner ảnh bìa cho khách — bo góc, thẳng lề với lưới ảnh */
 .client-cover { position: relative; width: 100%; height: min(46vh, 440px); overflow: hidden; border-radius: 18px; margin: 4px 0 18px; }

@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <script>try{document.documentElement.setAttribute('data-theme',localStorage.getItem('lamMienTheme')||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}</script>
-  <link rel="stylesheet" href="styles.css?v=20260614c">
+  <link rel="stylesheet" href="styles.css?v=20260614d">
   <link rel="icon" href="logo.svg">
 </head>
 <body>
@@ -195,10 +195,8 @@
               <img id="ad-cover" alt="Ảnh bìa">
               <button class="cover-change" id="ad-change-cover"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>Đổi ảnh bìa</button>
             </div>
-            <div class="side-head"><span>PHOTOS</span><button class="add-set" id="ad-add-edited">+ Ảnh sửa</button></div>
-            <div class="set-item active" data-set="goc" role="button" tabindex="0"><span class="set-label">📂 Ảnh gốc</span><span class="cnt" id="ad-goc-cnt">0</span><button class="set-dl" data-dl="goc" title="Tải về .zip"><svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg></button></div>
-            <div class="set-item" data-set="chon" role="button" tabindex="0"><span class="set-label">❤️ Ảnh chọn</span><span class="cnt" id="ad-chon-cnt">0</span><button class="set-dl" data-dl="chon" title="Tải về .zip"><svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg></button></div>
-            <div class="set-item" data-set="sua" role="button" tabindex="0"><span class="set-label">🎨 Ảnh sửa</span><span class="cnt" id="ad-sua-cnt">0</span><button class="set-dl" data-dl="sua" title="Tải về .zip"><svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg></button></div>
+            <div class="side-head"><span>PHOTOS</span><button class="add-set" id="ad-add-set">+ Album</button></div>
+            <div id="ad-sets"></div>
           </aside>
           <div class="detail-main">
             <div class="detail-grid-head">
@@ -417,8 +415,31 @@
     </div>
   </div>
 
+  <!-- ============== COVER MODAL (đổi ảnh bìa) ============== -->
+  <div class="modal" id="cover-modal">
+    <div class="modal-card wide">
+      <div class="modal-head"><h3 id="cover-title">Chọn ảnh làm bìa</h3><button class="icon-btn" id="cover-x"><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+      <div class="modal-body">
+        <div id="cover-step1">
+          <p class="sub" style="margin:0 0 12px;color:var(--muted)">Chọn 1 ảnh trong album để làm bìa:</p>
+          <div class="cover-pick-grid" id="cover-pick-grid"></div>
+        </div>
+        <div id="cover-step2" hidden>
+          <p class="sub" style="margin:0 0 12px;color:var(--muted)">Kéo ảnh để chỉnh vị trí hiển thị trong khung bìa:</p>
+          <div class="crop-frame" id="crop-frame"></div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn ghost" type="button" id="cover-back" hidden>← Chọn ảnh khác</button>
+        <span style="flex:1"></span>
+        <button class="btn ghost" type="button" id="cover-cancel">Huỷ</button>
+        <button class="btn primary" type="button" id="cover-save" hidden>Lưu ảnh bìa</button>
+      </div>
+    </div>
+  </div>
+
   <div class="toast" id="toast"></div>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-  <script src="app.js?v=20260614c"></script>
+  <script src="app.js?v=20260614d"></script>
 </body>
 </html>
