@@ -83,4 +83,20 @@ async function checkAuth(req) {
   return !!(await validUser(req.headers['x-user'], req.headers['x-pass']));
 }
 
-module.exports = { supa, configured, checkAuth, validUser, staffUser, staffPass };
+/* ---- Gửi email thông báo cho nhân sự (qua Resend) ---- */
+async function sendStudioEmail(subject, html) {
+  const key = process.env.RESEND_API_KEY;
+  const to = process.env.NOTIFY_EMAIL;
+  if (!key || !to) return false; // chưa cấu hình -> bỏ qua
+  const from = process.env.FROM_EMAIL || 'Lam Mien Studio <onboarding@resend.dev>';
+  try {
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from, to: to.split(',').map(s => s.trim()).filter(Boolean), subject, html }),
+    });
+    return res.ok;
+  } catch (_) { return false; }
+}
+
+module.exports = { supa, configured, checkAuth, validUser, staffUser, staffPass, sendStudioEmail };

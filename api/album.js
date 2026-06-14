@@ -1,7 +1,8 @@
 // /api/album?id=xxx — dành cho khách (không cần đăng nhập)
 // GET  -> dữ liệu album để hiển thị trang chọn ảnh
 // POST {review:{photoId:{r,n}}, status} -> lưu lựa chọn / ghi chú của khách vào album
-const { supa, configured } = require('./_supa');
+const { supa, configured, sendStudioEmail } = require('./_supa');
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
 
 module.exports = async (req, res) => {
   if (!configured()) return res.status(503).json({ error: 'Chưa cấu hình máy chủ' });
@@ -34,9 +35,11 @@ module.exports = async (req, res) => {
       }
       // Khách chỉ được phép đẩy trạng thái sang "đang chọn" / "chọn xong"
       if (status === 'choosing' || status === 'done') data.status = status;
-      // Khách chốt ảnh lần đầu -> ghi thời điểm + tính hạn trả (deadline = ngày chốt + số ngày)
+      // Khách chốt ảnh lần đầu -> ghi thời điểm + tính hạn trả + gửi email thông báo
+      let notify = false;
       if (status === 'done' && !data.selectedAt) {
         data.selectedAt = Date.now();
+        notify = true;
         if (data.deadlineDays) {
           const d = new Date(data.selectedAt + 7 * 3600 * 1000); // múi giờ VN
           d.setUTCDate(d.getUTCDate() + data.deadlineDays);
@@ -49,6 +52,18 @@ module.exports = async (req, res) => {
         prefer: 'return=minimal',
         body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
       });
+      if (notify) {
+        const sel = (data.photos || []).filter(p => p.review === 'selected' || p.selected);
+        const names = sel.slice(0, 50).map((p, i) => `${i + 1}. ${esc(p.name)}${p.note ? ` — <i>${esc(p.note)}</i>` : ''}`).join('<br>');
+        const html = `<div style="font-family:Arial,sans-serif;color:#222">
+          <h2>🎉 Khách đã chọn xong ảnh</h2>
+          <p><b>Album:</b> ${esc(data.name || '')}<br>
+          <b>Khách:</b> ${esc(data.client || '—')}<br>
+          <b>Số ảnh đã chọn:</b> ${sel.length}${data.maxCount ? ' / ' + data.maxCount : ''}</p>
+          <p><b>Danh sách ảnh chọn:</b><br>${names || '(trống)'}${sel.length > 50 ? '<br>… và ' + (sel.length - 50) + ' ảnh nữa' : ''}</p>
+          <p style="color:#777">Mở dashboard Lam Miên Studio để xem chi tiết &amp; tải về.</p></div>`;
+        await sendStudioEmail(`[Lam Miên] ${data.name || 'Khách'} đã chọn xong ${sel.length} ảnh`, html);
+      }
       return res.status(200).json({ ok: true });
     }
 
