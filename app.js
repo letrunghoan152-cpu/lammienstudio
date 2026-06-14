@@ -1201,13 +1201,17 @@
   }, { passive: true });
 
   /* ---------- Lightbox / trình xem ảnh ---------- */
-  let lbPhotos = [], lbMode = 'client', lbLoadToken = 0;
+  let lbPhotos = [], lbMode = 'client', lbLoadToken = 0, lbDir = 0;
   function showLbPhoto(p) {
     const img = $('#lb-img'); const token = ++lbLoadToken;
     img.alt = p.name || '';
     img.onerror = () => { img.onerror = null; const id = p.driveId || driveIdFromThumb(p.src); if (id) img.src = `https://lh3.googleusercontent.com/d/${id}=w1200`; };
     // Hiện thumbnail (đã cache trong lưới) ngay lập tức → không giật
     img.src = p.src || p.full;
+    // Hiệu ứng trượt theo hướng next/prev
+    img.classList.remove('lb-slide-l', 'lb-slide-r');
+    if (lbDir !== 0) { void img.offsetWidth; img.classList.add(lbDir > 0 ? 'lb-slide-r' : 'lb-slide-l'); }
+    lbDir = 0;
     // Rồi âm thầm nâng lên bản nét; chỉ áp dụng nếu vẫn đang xem ảnh này
     if (p.full && p.full !== p.src) {
       const hi = new Image();
@@ -1242,7 +1246,7 @@
     $('#lightbox').classList.add('open');
   }
   function closeLb() { $('#lightbox').classList.remove('open'); lbIndex = -1; }
-  function lbStep(d) { if (lbIndex < 0 || !lbPhotos.length) return; openLightbox(lbPhotos, (lbIndex + d + lbPhotos.length) % lbPhotos.length, lbMode); }
+  function lbStep(d) { if (lbIndex < 0 || !lbPhotos.length) return; lbDir = d; openLightbox(lbPhotos, (lbIndex + d + lbPhotos.length) % lbPhotos.length, lbMode); }
   function syncLb() {
     const p = lbPhotos[lbIndex]; if (!p) return;
     $('#lb-name').textContent = (p.name || '') + (p.note ? '  📝' : '');

@@ -563,6 +563,10 @@ img.logo { object-fit: contain; background: #efece5; padding: 2px; }
 .lightbox.open .lb-stage { animation: lbZoom .28s cubic-bezier(.22,.9,.28,1) both; }
 @keyframes lbZoom { from { transform: scale(.92); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 .lb-img-wrap img { transition: opacity .2s ease; }
+.lb-img-wrap img.lb-slide-r { animation: lbSlideR .26s cubic-bezier(.22,.9,.28,1); }
+.lb-img-wrap img.lb-slide-l { animation: lbSlideL .26s cubic-bezier(.22,.9,.28,1); }
+@keyframes lbSlideR { from { transform: translateX(42px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+@keyframes lbSlideL { from { transform: translateX(-42px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
 .guide-step { display: flex; gap: 14px; align-items: flex-start; }
 .guide-step + .guide-step { margin-top: 14px; }
 .guide-step .gn { flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--brand); color: #fff; font-weight: 800; font-size: 13px; }
