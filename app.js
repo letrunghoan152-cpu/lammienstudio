@@ -14,6 +14,12 @@
   const FIXED_DRIVE_KEY = 'AIzaSyB30IdJg_FKZpi2oOmF8bS7qMEna5P2dpg';
   const API_AUTH_KEY = 'lamMienApiAuth';
   const MIGRATED_KEY = 'lamMienMigrated';
+  const THEME_KEY = 'lamMienTheme';
+
+  /* ---------- Giao diện sáng/tối ---------- */
+  function applyTheme(t) { document.documentElement.setAttribute('data-theme', t === 'light' ? 'light' : 'dark'); try { localStorage.setItem(THEME_KEY, t); } catch (_) {} }
+  function toggleTheme() { const cur = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark'; applyTheme(cur === 'light' ? 'dark' : 'light'); }
+  $$('.theme-toggle').forEach(b => b.addEventListener('click', toggleTheme));
 
   /* ---------- API (đồng bộ đa thiết bị) ---------- */
   let apiAuth = null;          // {u, p} của nhân sự
