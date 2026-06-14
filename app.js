@@ -725,6 +725,31 @@
   }
   $('#ad-preview').addEventListener('click', () => { if (detailAlbum) openClient(detailAlbum, true); });
   $('#ad-share').addEventListener('click', () => { if (detailAlbum) openShare(detailAlbum); });
+  $('#ad-sync').addEventListener('click', async () => {
+    const al = detailAlbum; if (!al) return;
+    if (!al.sourceUrl) { toast('Album này không lấy từ Google Drive nên không đồng bộ được'); return; }
+    const btn = $('#ad-sync'); const old = btn.innerHTML; btn.disabled = true; btn.textContent = 'Đang đồng bộ…';
+    try {
+      const fresh = await buildDrivePhotos(al.sourceUrl, FIXED_DRIVE_KEY);
+      // Giữ lựa chọn/ghi chú cho ảnh còn tồn tại (ghép theo Drive ID)
+      const oldById = {};
+      al.photos.forEach(p => { const id = p.driveId || driveIdFromThumb(p.src); if (id) oldById[id] = p; });
+      let added = 0, kept = 0;
+      fresh.forEach(np => {
+        const o = oldById[np.driveId];
+        if (o) { np.review = o.review || ''; np.selected = !!o.selected; np.note = o.note || ''; kept++; }
+        else added++;
+      });
+      const removed = al.photos.length - kept;
+      al.photos = fresh;
+      if (al.cover && !fresh.some(p => (p.full || p.src) === al.cover)) al.cover = ''; // bìa cũ đã bị xoá
+      al.lastActivity = Date.now();
+      saveAlbums(al);
+      renderDetail(); renderAlbums();
+      toast(`Đã đồng bộ: +${added} ảnh mới, bỏ ${removed} ảnh, giữ ${kept} ảnh`);
+    } catch (err) { toast('Lỗi đồng bộ: ' + (err.message || err)); }
+    finally { btn.disabled = false; btn.innerHTML = old; }
+  });
   $('#ad-sort').addEventListener('click', () => { detailSort = detailSort === 'az' ? 'za' : 'az'; renderDetail(); });
   $$('#ad-view button').forEach(b => b.addEventListener('click', () => { detailView = b.dataset.v; renderDetail(); }));
   $('#ad-change-cover').addEventListener('click', () => {
