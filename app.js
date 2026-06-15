@@ -65,7 +65,15 @@
         // để không vô tình "hồi sinh" album đã xoá ở thiết bị khác.
         const recent = albums.filter(a => !serverIds.has(a.id) && (Date.now() - (a.createdAt || 0) < 60000));
         recent.forEach(apiPushAlbum);
-        albums = list.concat(recent);
+        // Giữ thay đổi cục bộ mới hơn (vd vừa đổi bìa/album) chưa kịp đồng bộ về máy chủ,
+        // và đẩy lại lên để không bị mất khi máy chủ trả về bản cũ.
+        const localById = {}; albums.forEach(a => { if (a.id) localById[a.id] = a; });
+        const merged = list.map(sv => {
+          const lo = localById[sv.id];
+          if (lo && (lo.lastActivity || 0) > (sv.lastActivity || 0)) { apiPushAlbum(lo); return lo; }
+          return sv;
+        });
+        albums = merged.concat(recent);
       }
       albums.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
       try { localStorage.setItem(MIGRATED_KEY, '1'); } catch (_) {}
@@ -416,7 +424,7 @@
     const st = statusOf(al.status);
     const sel = selCount(al);
     const total = al.photos.length;
-    const cover = (al.photos[0] && al.photos[0].src) || '';
+    const cover = albumCover(al);
     const pct = total ? Math.round(sel / total * 100) : 0;
     const card = document.createElement('div');
     card.className = 'acard';
@@ -572,6 +580,10 @@
     if (apiSync) {
       apiGetAlbum(id).then(fresh => {
         const idx = albums.findIndex(x => x.id === id);
+        const local = idx >= 0 ? albums[idx] : detailAlbum;
+        // Tránh đua thời gian: nếu bản local vừa được sửa (bìa/album…) mới hơn bản máy chủ
+        // thì giữ local, không ghi đè bằng dữ liệu cũ vừa tải về.
+        if (local && (local.lastActivity || 0) > (fresh.lastActivity || 0)) return;
         if (idx >= 0) { albums[idx] = fresh; saveAlbumsLocal(); }
         if (detailAlbum && detailAlbum.id === id) { detailAlbum = fresh; renderDetail(); }
       }).catch(() => {});
