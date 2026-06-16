@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <script>try{document.documentElement.setAttribute('data-theme',localStorage.getItem('lamMienTheme')||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}</script>
-  <link rel="stylesheet" href="styles.css?v=20260615a">
+  <link rel="stylesheet" href="styles.css?v=20260616a">
   <link rel="icon" href="logo.svg">
 </head>
 <body>
@@ -78,6 +78,11 @@
         <a data-page="trash"><svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M6 6l1 14a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-14"/></svg>Thùng rác <span class="sb-badge" id="trash-badge" hidden>0</span></a>
       </nav>
       <div class="sb-foot">
+        <button class="sb-drive" id="sb-drive" title="Kết nối Google Drive để upload ảnh">
+          <span class="dico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12a10 10 0 1 1-3-7.1"/><path d="M22 4v6h-6"/></svg></span>
+          <span class="dmeta"><strong id="sb-drive-title">Chưa kết nối Drive</strong><small id="sb-drive-sub">Bấm để liên kết tài khoản</small></span>
+          <span class="ddot" id="sb-drive-dot"></span>
+        </button>
         <div class="sb-user">
           <span class="av" id="sb-av">L</span>
           <span class="meta"><strong id="sb-name">Lam Miên</strong><small>Nhân sự studio</small></span>
@@ -279,6 +284,43 @@
   </div>
 
   <!-- ============== CREATE ALBUM MODAL ============== -->
+  <!-- ============== DRIVE CONNECT MODAL ============== -->
+  <div class="modal" id="drive-modal">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3>Kết nối Google Drive</h3>
+        <button class="icon-btn" id="drive-close"><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+      </div>
+      <div class="modal-body">
+        <div class="drive-state" id="drive-state">
+          <span class="ddot" id="drive-modal-dot"></span>
+          <span id="drive-modal-text">Chưa liên kết tài khoản nào.</span>
+        </div>
+        <div class="field">
+          <label for="gcid">OAuth Client ID</label>
+          <input id="gcid" placeholder="xxxxxxxx.apps.googleusercontent.com">
+          <span class="hint">Lấy ở Google Cloud Console → Credentials → OAuth Client ID (Web). Chỉ cần nhập 1 lần.</span>
+        </div>
+        <details class="drive-help">
+          <summary>Hướng dẫn lấy Client ID (1 lần)</summary>
+          <ol>
+            <li>Vào <strong>console.cloud.google.com</strong> → tạo project.</li>
+            <li><strong>APIs &amp; Services → Enable APIs</strong> → bật <strong>Google Drive API</strong>.</li>
+            <li><strong>OAuth consent screen</strong>: chọn External, điền tên app, thêm email của bạn vào <em>Test users</em>.</li>
+            <li><strong>Credentials → Create → OAuth client ID → Web application</strong>.</li>
+            <li>Mục <em>Authorized JavaScript origins</em> thêm đúng tên miền web (vd <code>https://tenmien.com</code>).</li>
+            <li>Copy <strong>Client ID</strong> dán vào ô trên.</li>
+          </ol>
+        </details>
+      </div>
+      <div class="modal-foot">
+        <button class="btn ghost" type="button" id="drive-unlink" hidden>Ngắt liên kết</button>
+        <span class="grow"></span>
+        <button class="btn primary" type="button" id="drive-link">Liên kết tài khoản Google</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal" id="create-modal">
     <div class="modal-card wide">
       <div class="modal-head">
@@ -304,9 +346,35 @@
             </div>
           </div>
           <div class="field">
-            <label for="drive-url">Link thư mục Google Drive</label>
-            <textarea id="drive-url" rows="2" placeholder="https://drive.google.com/drive/folders/..."></textarea>
-            <span class="hint">Thư mục Drive phải chia sẻ ở chế độ “Bất kỳ ai có đường liên kết”.</span>
+            <label>Nguồn ảnh</label>
+            <div class="seg src-seg" id="src-seg">
+              <button type="button" data-src="upload" class="active">Tải từ máy</button>
+              <button type="button" data-src="drive">Link Google Drive</button>
+            </div>
+          </div>
+
+          <div class="src-pane" id="pane-upload">
+            <div class="dropzone" id="dropzone">
+              <input type="file" id="file-input" accept="image/*" multiple hidden>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></svg>
+              <strong>Kéo thả ảnh vào đây</strong>
+              <span>hoặc <u>bấm để chọn ảnh</u> từ máy tính</span>
+            </div>
+            <div class="pick-info" id="pick-info" hidden></div>
+            <div class="upload-progress" id="upload-progress" hidden>
+              <div class="up-row"><span id="up-stage">Đang tải lên…</span><span id="up-pct">0%</span></div>
+              <div class="up-bar"><div class="up-fill" id="up-fill"></div></div>
+              <div class="up-stats"><span id="up-count">0 / 0 ảnh</span><span id="up-speed">— MB/s</span><span id="up-eta">còn — </span></div>
+            </div>
+            <span class="hint" id="upload-hint">Ảnh sẽ được upload thẳng lên Google Drive đã liên kết và tự chia sẻ “Bất kỳ ai có link”.</span>
+          </div>
+
+          <div class="src-pane" id="pane-drive" hidden>
+            <div class="field">
+              <label for="drive-url">Link thư mục Google Drive</label>
+              <textarea id="drive-url" rows="2" placeholder="https://drive.google.com/drive/folders/..."></textarea>
+              <span class="hint">Thư mục Drive phải chia sẻ ở chế độ “Bất kỳ ai có đường liên kết”.</span>
+            </div>
           </div>
           <div class="row2">
             <label class="switch"><input id="allow-notes" type="checkbox" checked><span class="track"></span><span>Cho phép khách ghi chú</span></label>
@@ -440,6 +508,7 @@
 
   <div class="toast" id="toast"></div>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-  <script src="app.js?v=20260615a"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script src="app.js?v=20260616a"></script>
 </body>
 </html>
