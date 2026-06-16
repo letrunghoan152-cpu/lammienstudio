@@ -235,6 +235,7 @@
         apiAuth = { u, p, name: d.name || u };
         try { localStorage.setItem(API_AUTH_KEY, JSON.stringify(apiAuth)); } catch (_) {}
         viaApi = true;
+        checkStudioDrive();   // biết studio đã kết nối Drive chưa
         if (d.sync) { await refreshAlbumsFromServer(); }
         else toast('Máy chủ chưa nối database — dữ liệu chỉ lưu trên máy này');
       } else if (r.status === 401) {
@@ -343,11 +344,13 @@
   const DRIVE_EMAIL_KEY = 'lamMienDriveEmail';
   const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.email';
   let driveToken = '', driveTokenExp = 0, driveEmail = '';
+  let studioConnected = false;   // studio đã kết nối Drive ở máy chủ -> nhân sự khỏi đăng nhập Google
   let _tokenClient = null, _tokenResolve = null, _tokenReject = null, _tokenTimer = null;
   try { driveEmail = localStorage.getItem(DRIVE_EMAIL_KEY) || ''; } catch (_) {}
 
   function getClientId() { try { return (localStorage.getItem(GCID_KEY) || '').trim(); } catch (_) { return ''; } }
-  function driveLinked() { return !!(getClientId() && driveEmail); }
+  function driveLinked() { return studioConnected || !!(getClientId() && driveEmail); }
+  function canUseDrive() { return studioConnected || !!(getClientId() && driveEmail); }
   function gisReady() { return !!(window.google && google.accounts && google.accounts.oauth2); }
 
   function buildTokenClient() {
@@ -391,7 +394,57 @@
   }
   async function ensureDriveToken(interactive) {
     if (driveToken && Date.now() < driveTokenExp) return driveToken;
+    // 1) Ưu tiên token của STUDIO từ máy chủ -> nhân sự không cần đăng nhập Google
+    if (apiAuth) {
+      const t = await fetchServerToken();
+      if (t && t.access_token) {
+        driveToken = t.access_token; driveTokenExp = Date.now() + ((t.expires_in || 3500) - 60) * 1000;
+        studioConnected = true;
+        if (t.email) { driveEmail = t.email; try { localStorage.setItem(DRIVE_EMAIL_KEY, driveEmail); } catch (_) {} }
+        renderDriveStatus();
+        return driveToken;
+      }
+    }
+    // 2) Dự phòng: liên kết riêng từng máy (GIS)
     return requestToken(!!interactive);
+  }
+  // Lấy access token của studio từ máy chủ (null nếu studio chưa kết nối)
+  async function fetchServerToken() {
+    if (!apiAuth) return null;
+    try {
+      const r = await fetch('/api/drive-token', { headers: apiHeaders(), cache: 'no-store' });
+      if (r.ok) return r.json();
+    } catch (_) {}
+    return null;
+  }
+  // Kiểm tra studio đã kết nối Drive chưa (không cấp token)
+  async function checkStudioDrive() {
+    if (!apiAuth) return;
+    try {
+      const r = await fetch('/api/drive-token?status=1', { headers: apiHeaders(), cache: 'no-store' });
+      if (r.ok) { const j = await r.json(); studioConnected = true; if (j.email) driveEmail = j.email; renderDriveStatus(); }
+      else { studioConnected = false; renderDriveStatus(); }
+    } catch (_) {}
+  }
+  // Kết nối Drive cho cả studio (1 lần, chủ studio thực hiện)
+  async function connectStudioDrive() {
+    if (!apiAuth) { toast('Hãy đăng nhập ứng dụng trước'); return; }
+    let state;
+    try {
+      const r = await fetch('/api/google-auth?action=state', { method: 'POST', headers: apiHeaders() });
+      if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || ('HTTP ' + r.status)); }
+      state = (await r.json()).state;
+    } catch (e) { toast('Lỗi: ' + (e.message || e)); return; }
+    const w = 520, h = 660, left = (screen.width - w) / 2, top = (screen.height - h) / 2;
+    const pop = window.open('/api/google-auth?action=start&state=' + encodeURIComponent(state), 'studio-drive', `width=${w},height=${h},left=${left},top=${top}`);
+    toast('Mở cửa sổ Google để cấp quyền…');
+    const timer = setInterval(async () => {
+      if (pop && pop.closed) {
+        clearInterval(timer);
+        await checkStudioDrive();
+        toast(studioConnected ? ('Đã kết nối Drive studio: ' + driveEmail) : 'Chưa hoàn tất kết nối — thử lại');
+      }
+    }, 800);
   }
   async function fetchDriveEmail(token) {
     try {
@@ -416,14 +469,16 @@
   function renderDriveStatus() {
     const linked = driveLinked();
     const t = $('#sb-drive-title'), s = $('#sb-drive-sub'), dot = $('#sb-drive-dot');
-    if (t) t.textContent = linked ? 'Google Drive' : 'Chưa kết nối Drive';
+    if (t) t.textContent = studioConnected ? 'Google Drive (studio)' : (linked ? 'Google Drive' : 'Chưa kết nối Drive');
     if (s) s.textContent = linked ? driveEmail : 'Bấm để liên kết tài khoản';
     if (dot) dot.classList.toggle('on', linked);
     const md = $('#drive-modal-dot'), mt = $('#drive-modal-text'), unb = $('#drive-unlink'), lb = $('#drive-link');
     if (md) md.classList.toggle('on', linked);
-    if (mt) mt.textContent = linked ? ('Đã liên kết: ' + driveEmail) : 'Chưa liên kết tài khoản nào.';
-    if (unb) unb.hidden = !linked;
-    if (lb) lb.textContent = linked ? 'Liên kết lại / đổi tài khoản' : 'Liên kết tài khoản Google';
+    if (mt) mt.textContent = studioConnected ? ('Đã kết nối cho cả studio: ' + driveEmail + ' — nhân sự không cần đăng nhập Google.')
+      : (linked ? ('Đã liên kết (máy này): ' + driveEmail) : 'Chưa liên kết tài khoản nào.');
+    if (unb) unb.hidden = !(getClientId() && driveEmail) || studioConnected;
+    if (lb) lb.textContent = (getClientId() && driveEmail) ? 'Liên kết lại / đổi tài khoản' : 'Liên kết tài khoản Google';
+    const sc = $('#drive-studio-connect'); if (sc) sc.textContent = studioConnected ? 'Kết nối lại / đổi tài khoản studio' : 'Kết nối studio (1 lần)';
   }
 
   // ---- Thao tác ghi lên Drive ----
@@ -593,7 +648,10 @@
     finally { btn.disabled = false; btn.textContent = old; }
   });
   $('#drive-unlink') && $('#drive-unlink').addEventListener('click', () => { unlinkDrive(); toast('Đã ngắt liên kết Google Drive'); });
+  $('#drive-studio-connect') && $('#drive-studio-connect').addEventListener('click', connectStudioDrive);
+  $('#drive-done') && $('#drive-done').addEventListener('click', closeDriveModal);
   renderDriveStatus();
+  checkStudioDrive();   // hỏi máy chủ xem studio đã kết nối Drive chưa
 
   /* ---------- Create modal ---------- */
   let pickedUploadFiles = [], createSource = 'upload';
@@ -710,12 +768,11 @@
     }
 
     // Nguồn "Tải từ máy" -> upload chạy nền
-    if (!getClientId() || !driveLinked()) { toast('Hãy kết nối Google Drive trước khi upload'); openDriveModal(); return; }
     if (!pickedUploadFiles.length) { toast('Hãy chọn ảnh từ máy'); return; }
     const files = pickedUploadFiles;
-    if (!(driveToken && Date.now() < driveTokenExp)) {   // lấy token im lặng (không bắt đăng nhập lại)
+    if (!(driveToken && Date.now() < driveTokenExp)) {   // lấy token (studio ở máy chủ, hoặc cá nhân)
       try { await ensureDriveToken(false); }
-      catch (_) { toast('Phiên Google Drive đã hết — bấm “Liên kết tài khoản” một lần nữa'); openDriveModal(); return; }
+      catch (_) { toast('Chưa kết nối Google Drive — mở phần “Kết nối Drive”'); openDriveModal(); return; }
     }
     closeCreate();                            // đóng popup ngay để làm việc khác
     toast('Đang tải ảnh lên Google Drive…');
@@ -1099,7 +1156,7 @@
     files = Array.from(files || []).filter(f => f.type && f.type.startsWith('image/'));
     if (!files.length) { toast('Chỉ nhận file ảnh'); return; }
     if (detailSet === 'chon') { toast('Không thể thêm ảnh vào mục “Ảnh chọn”. Hãy chọn “Ảnh gốc” hoặc một album.'); return; }
-    if (!getClientId() || !driveLinked()) { toast('Hãy kết nối Google Drive trước'); openDriveModal(); return; }
+    if (!canUseDrive()) { toast('Chưa kết nối Google Drive — mở phần “Kết nối Drive”'); openDriveModal(); return; }
     const folderId = currentSetFolderId();
     if (!folderId) { toast('Album này không có thư mục Google Drive nên không thêm ảnh được'); return; }
     const arr = currentSetArray(); if (!arr) return;

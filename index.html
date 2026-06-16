@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <script>try{document.documentElement.setAttribute('data-theme',localStorage.getItem('lamMienTheme')||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}</script>
-  <link rel="stylesheet" href="styles.css?v=20260616d">
+  <link rel="stylesheet" href="styles.css?v=20260617a">
   <link rel="icon" href="logo.svg">
 </head>
 <body>
@@ -306,27 +306,38 @@
           <span class="ddot" id="drive-modal-dot"></span>
           <span id="drive-modal-text">Chưa liên kết tài khoản nào.</span>
         </div>
-        <div class="field">
-          <label for="gcid">OAuth Client ID</label>
-          <input id="gcid" placeholder="xxxxxxxx.apps.googleusercontent.com">
-          <span class="hint">Lấy ở Google Cloud Console → Credentials → OAuth Client ID (Web). Chỉ cần nhập 1 lần.</span>
+
+        <div class="drive-opt">
+          <strong>Cách 1 — Kết nối cho cả studio (khuyên dùng)</strong>
+          <p>Chủ studio kết nối <b>một lần</b>. Sau đó mọi nhân sự tải ảnh lên mà <b>không cần đăng nhập Google</b>.</p>
+          <button class="btn primary block" type="button" id="drive-studio-connect">Kết nối studio (1 lần)</button>
+          <details class="drive-help">
+            <summary>Thiết lập 1 lần (chủ studio)</summary>
+            <ol>
+              <li>Trong OAuth Client (Google Cloud Console), thêm <strong>Authorized redirect URI</strong>: <code>https://www.lammienstudio.com/api/google-auth</code></li>
+              <li>Trên Vercel, thêm 2 biến môi trường: <code>GOOGLE_CLIENT_ID</code> và <code>GOOGLE_CLIENT_SECRET</code> (lấy ở cùng OAuth Client).</li>
+              <li>Tạo bảng trong Supabase (SQL Editor):<br><code>create table if not exists app_config (key text primary key, value jsonb, updated_at timestamptz default now());</code><br><code>alter table app_config disable row level security;</code></li>
+              <li>Quay lại đây, bấm <strong>“Kết nối studio”</strong> và đăng nhập tài khoản Google của studio.</li>
+            </ol>
+          </details>
         </div>
-        <details class="drive-help">
-          <summary>Hướng dẫn lấy Client ID (1 lần)</summary>
-          <ol>
-            <li>Vào <strong>console.cloud.google.com</strong> → tạo project.</li>
-            <li><strong>APIs &amp; Services → Enable APIs</strong> → bật <strong>Google Drive API</strong>.</li>
-            <li><strong>OAuth consent screen</strong>: chọn External, điền tên app, thêm email của bạn vào <em>Test users</em>.</li>
-            <li><strong>Credentials → Create → OAuth client ID → Web application</strong>.</li>
-            <li>Mục <em>Authorized JavaScript origins</em> thêm đúng tên miền web (vd <code>https://tenmien.com</code>).</li>
-            <li>Copy <strong>Client ID</strong> dán vào ô trên.</li>
-          </ol>
+
+        <details class="drive-opt2">
+          <summary>Cách 2 — Liên kết riêng từng máy (không cần máy chủ)</summary>
+          <div class="field" style="margin-top:10px">
+            <label for="gcid">OAuth Client ID</label>
+            <input id="gcid" placeholder="xxxxxxxx.apps.googleusercontent.com">
+            <span class="hint">Mỗi máy đăng nhập Google một lần. Lấy ở Credentials → OAuth Client ID (Web).</span>
+          </div>
+          <div style="display:flex;gap:8px;justify-content:flex-end">
+            <button class="btn ghost" type="button" id="drive-unlink" hidden>Ngắt liên kết</button>
+            <button class="btn ghost" type="button" id="drive-link">Liên kết tài khoản Google</button>
+          </div>
         </details>
       </div>
       <div class="modal-foot">
-        <button class="btn ghost" type="button" id="drive-unlink" hidden>Ngắt liên kết</button>
         <span class="grow"></span>
-        <button class="btn primary" type="button" id="drive-link">Liên kết tài khoản Google</button>
+        <button class="btn ghost" type="button" id="drive-done">Xong</button>
       </div>
     </div>
   </div>
@@ -529,6 +540,6 @@
   <div class="upload-stack" id="upload-stack"></div>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <script src="app.js?v=20260616d"></script>
+  <script src="app.js?v=20260617a"></script>
 </body>
 </html>

@@ -90,3 +90,22 @@ Lưu ý:
 - App chỉ xin quyền `drive.file` — chỉ đụng được file/thư mục do chính app tạo (an toàn).
 - Ảnh upload tự được chia sẻ "Bất kỳ ai có link" để khách xem & hiển thị nhanh.
 - Không cần đổi gì trên Vercel; toàn bộ chạy phía trình duyệt (không lộ secret).
+
+## Kết nối Drive cho CẢ STUDIO (nhân sự không cần đăng nhập Google)
+
+Chủ studio làm 1 lần, sau đó mọi nhân sự upload mà không thấy màn hình Google.
+
+1. **Supabase** → SQL Editor, chạy:
+   ```sql
+   create table if not exists app_config (key text primary key, value jsonb, updated_at timestamptz default now());
+   alter table app_config disable row level security;
+   ```
+2. **Google Cloud Console** → OAuth Client (Web application) → thêm **Authorized redirect URI**:
+   `https://www.lammienstudio.com/api/google-auth`
+3. **Vercel** → Project → Settings → Environment Variables, thêm:
+   - `GOOGLE_CLIENT_ID` = Client ID của OAuth Client
+   - `GOOGLE_CLIENT_SECRET` = Client Secret của OAuth Client đó
+   Rồi **Redeploy**.
+4. Mở web (qua `https://www.lammienstudio.com`) → góc trái dưới bấm **Kết nối Drive** → **“Kết nối studio (1 lần)”** → đăng nhập tài khoản Google của studio.
+
+Xong. Refresh token lưu ở Supabase (bảng `app_config`, key `studio_drive`), máy chủ tự cấp token ngắn hạn cho nhân sự. Vì app đã ở Production nên refresh token không hết hạn.

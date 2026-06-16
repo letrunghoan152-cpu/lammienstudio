@@ -28,6 +28,18 @@ async function supa(path, opts = {}) {
 function staffUser() { return process.env.STAFF_USER || 'lammien'; }
 function staffPass() { return process.env.STAFF_PASS || 'lammien'; }
 
+/* ---- Cấu hình dùng chung (bảng app_config: key text PK, value jsonb) ---- */
+async function getConfig(key) {
+  const rows = await supa(`app_config?key=eq.${encodeURIComponent(key)}&select=value`);
+  return rows && rows[0] ? rows[0].value : null;
+}
+async function setConfig(key, value) {
+  await supa('app_config?on_conflict=key', {
+    method: 'POST', prefer: 'resolution=merge-duplicates,return=minimal',
+    body: JSON.stringify([{ key, value, updated_at: new Date().toISOString() }]),
+  });
+}
+
 /* ---- Đọc danh sách nhân sự từ Google Sheet (cột: A tài khoản, B mật khẩu, C tên, D trạng thái) ---- */
 function parseCsv(text) {
   const rows = []; let row = [], cur = '', q = false;
@@ -99,4 +111,4 @@ async function sendStudioEmail(subject, html) {
   } catch (_) { return false; }
 }
 
-module.exports = { supa, configured, checkAuth, validUser, staffUser, staffPass, sendStudioEmail };
+module.exports = { supa, configured, checkAuth, validUser, staffUser, staffPass, sendStudioEmail, getConfig, setConfig };
