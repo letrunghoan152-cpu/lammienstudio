@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <script>try{document.documentElement.setAttribute('data-theme',localStorage.getItem('lamMienTheme')||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}</script>
-  <link rel="stylesheet" href="styles.css?v=20260616c">
+  <link rel="stylesheet" href="styles.css?v=20260616d">
   <link rel="icon" href="logo.svg">
 </head>
 <body>
@@ -203,10 +203,12 @@
             <div class="side-head"><span>PHOTOS</span><button class="add-set" id="ad-add-set">+ Album</button></div>
             <div id="ad-sets"></div>
           </aside>
-          <div class="detail-main">
+          <div class="detail-main" id="ad-grid-wrap">
+            <input type="file" id="ad-file-input" accept="image/*" multiple hidden>
             <div class="detail-grid-head">
               <h2 id="ad-set-title">ẢNH GỐC</h2>
               <span class="grow"></span>
+              <button class="btn ghost sm" id="ad-add-photos" title="Thêm ảnh từ máy (hoặc kéo-thả ảnh vào vùng này)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Thêm ảnh</button>
               <button class="btn ghost sm" id="ad-pick" title="Chọn ảnh để xoá">Chọn</button>
               <button class="btn ghost sm" id="ad-sort" title="Đổi chiều sắp xếp">A→Z</button>
               <div class="seg mini" id="ad-view">
@@ -325,6 +327,20 @@
         <button class="btn ghost" type="button" id="drive-unlink" hidden>Ngắt liên kết</button>
         <span class="grow"></span>
         <button class="btn primary" type="button" id="drive-link">Liên kết tài khoản Google</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============== DUP MODAL (ảnh trùng tên) ============== -->
+  <div class="modal" id="dup-modal">
+    <div class="modal-card">
+      <div class="modal-head"><h3>Ảnh trùng tên</h3></div>
+      <div class="modal-body"><p id="dup-text" style="line-height:1.6"></p></div>
+      <div class="modal-foot">
+        <button class="btn ghost" type="button" id="dup-cancel">Huỷ</button>
+        <span class="grow"></span>
+        <button class="btn ghost" type="button" id="dup-both">Giữ cả hai bản</button>
+        <button class="btn primary" type="button" id="dup-over">Ghi đè bản cũ</button>
       </div>
     </div>
   </div>
@@ -513,6 +529,6 @@
   <div class="upload-stack" id="upload-stack"></div>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <script src="app.js?v=20260616c"></script>
+  <script src="app.js?v=20260616d"></script>
 </body>
 </html>

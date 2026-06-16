@@ -507,12 +507,8 @@
       createImageBitmap(file).then(bm => { const d = { w: bm.width, h: bm.height }; if (bm.close) bm.close(); resolve(d); }).catch(() => resolve({ w: 0, h: 0 }));
     });
   }
-  // Upload cả album (song song 3 luồng) + tiến độ tổng / tốc độ / ETA
-  async function uploadAlbumPhotos(files, folderName, ui) {
-    const token = await ensureDriveToken(true);
-    if (!driveEmail) { driveEmail = (await fetchDriveEmail(token)) || 'Đã liên kết'; try { localStorage.setItem(DRIVE_EMAIL_KEY, driveEmail); } catch (_) {} renderDriveStatus(); }
-    const folderId = await driveCreateFolder(folderName, token);
-    await driveShareAnyone(folderId, token);
+  // Upload danh sách file vào 1 thư mục có sẵn (song song 3 luồng) + tiến độ tổng / tốc độ / ETA
+  async function uploadFilesToFolder(files, folderId, token, ui) {
     const total = files.reduce((s, f) => s + f.size, 0);
     let uploaded = 0, done = 0, idx = 0;
     const startT = Date.now();
@@ -531,14 +527,22 @@
         try {
           const id = await driveUploadFile(file, folderId, token, d => { uploaded += d; });
           await driveShareAnyone(id, token);
-          results[i] = { id: 'd' + i, name: file.name, driveId: id, w: dim.w, h: dim.h, src: driveThumb(id, 'w400'), full: driveThumb(id, 'w1600'), selected: false, note: '' };
+          results[i] = { id: 'a' + id, name: file.name, driveId: id, w: dim.w, h: dim.h, src: driveThumb(id, 'w400'), full: driveThumb(id, 'w1600'), selected: false, note: '' };
         } catch (_) { results[i] = null; }
         done++; tick();
       }
     };
     await Promise.all(Array.from({ length: Math.min(3, files.length) }, worker));
     clearInterval(timer); uploaded = total; tick(); ui.finish();
-    const photos = results.filter(Boolean);
+    return results.filter(Boolean);
+  }
+  // Tạo album mới: tạo folder rồi upload vào đó
+  async function uploadAlbumPhotos(files, folderName, ui) {
+    const token = await ensureDriveToken(false);
+    if (!driveEmail) { driveEmail = (await fetchDriveEmail(token)) || 'Đã liên kết'; try { localStorage.setItem(DRIVE_EMAIL_KEY, driveEmail); } catch (_) {} renderDriveStatus(); }
+    const folderId = await driveCreateFolder(folderName, token);
+    await driveShareAnyone(folderId, token);
+    const photos = await uploadFilesToFolder(files, folderId, token, ui);
     if (!photos.length) throw new Error('Không upload được ảnh nào');
     return { folderId, photos };
   }
@@ -1070,6 +1074,79 @@
     toast(`Đã xoá ${toDel.length} ảnh`);
     driveTrashFiles(toDel.map(p => p.driveId).filter(Boolean));   // đồng bộ xoá trên Drive (nền)
   }
+
+  /* ---------- Thêm ảnh vào album có sẵn ---------- */
+  function currentSetFolderId() {
+    const al = detailAlbum;
+    if (detailSet === 'goc') return extractFolderId(al.sourceUrl || '');
+    const s = al.sets.find(x => x.id === detailSet);
+    return s ? extractFolderId(s.sourceUrl || '') : '';
+  }
+  // Hộp thoại hỏi cách xử lý ảnh trùng tên -> trả 'overwrite' | 'both' | 'cancel'
+  function askDuplicate(names) {
+    return new Promise(resolve => {
+      const m = $('#dup-modal');
+      const list = names.slice(0, 6).join(', ') + (names.length > 6 ? `… (+${names.length - 6})` : '');
+      $('#dup-text').innerHTML = `Có <b>${names.length}</b> ảnh trùng tên đã có trong album:<br><span style="color:var(--muted)">${escapeHtml(list)}</span><br><br>Bạn muốn xử lý thế nào?`;
+      m.classList.add('open');
+      const done = v => { m.classList.remove('open'); $('#dup-over').onclick = $('#dup-both').onclick = $('#dup-cancel').onclick = null; resolve(v); };
+      $('#dup-over').onclick = () => done('overwrite');
+      $('#dup-both').onclick = () => done('both');
+      $('#dup-cancel').onclick = () => done('cancel');
+    });
+  }
+  async function addPhotosToSet(files) {
+    files = Array.from(files || []).filter(f => f.type && f.type.startsWith('image/'));
+    if (!files.length) { toast('Chỉ nhận file ảnh'); return; }
+    if (detailSet === 'chon') { toast('Không thể thêm ảnh vào mục “Ảnh chọn”. Hãy chọn “Ảnh gốc” hoặc một album.'); return; }
+    if (!getClientId() || !driveLinked()) { toast('Hãy kết nối Google Drive trước'); openDriveModal(); return; }
+    const folderId = currentSetFolderId();
+    if (!folderId) { toast('Album này không có thư mục Google Drive nên không thêm ảnh được'); return; }
+    const arr = currentSetArray(); if (!arr) return;
+    // phát hiện trùng tên
+    const existing = new Set(arr.map(p => p.name));
+    const dupNames = [...new Set(files.filter(f => existing.has(f.name)).map(f => f.name))];
+    let mode = 'both';
+    if (dupNames.length) { mode = await askDuplicate(dupNames); if (mode === 'cancel') return; }
+    // token im lặng
+    if (!(driveToken && Date.now() < driveTokenExp)) {
+      try { await ensureDriveToken(false); }
+      catch (_) { toast('Phiên Google Drive đã hết — bấm “Liên kết tài khoản” lại'); openDriveModal(); return; }
+    }
+    const albumRef = detailAlbum, setRef = detailSet;
+    toast('Đang thêm ảnh vào album…');
+    runAddJob(albumRef, setRef, folderId, files, mode, dupNames);
+  }
+  async function runAddJob(album, setId, folderId, files, mode, dupNames) {
+    const ui = createUploadItem('+ ' + (files.length) + ' ảnh → ' + album.name, files.length);
+    try {
+      const token = await driveTokenOrPrompt();
+      const added = await uploadFilesToFolder(files, folderId, token, ui);
+      if (!added.length) throw new Error('Không upload được ảnh nào');
+      // lấy mảng ảnh đích hiện tại của album (album có thể đã thay đổi reference do đồng bộ)
+      const target = setId === 'goc' ? album.photos : (album.sets.find(x => x.id === setId) || {}).photos;
+      if (!Array.isArray(target)) throw new Error('Không tìm thấy album đích');
+      let base = target;
+      if (mode === 'overwrite' && dupNames.length) {
+        const dupSet = new Set(dupNames);
+        const old = target.filter(p => dupSet.has(p.name));
+        const rm = new Set(old.map(photoKey));
+        base = target.filter(p => !rm.has(photoKey(p)));
+        driveTrashFiles(old.map(p => p.driveId).filter(Boolean)); // xoá bản cũ trên Drive
+      }
+      const merged = base.concat(added);
+      if (setId === 'goc') album.photos = merged;
+      else { const s = album.sets.find(x => x.id === setId); if (s) s.photos = merged; }
+      album.lastActivity = Date.now(); saveAlbums(album);
+      if (detailAlbum && detailAlbum.id === album.id) renderDetail();
+      renderAlbums();
+      ui.done('✓ Đã thêm ' + added.length + ' ảnh' + (mode === 'overwrite' && dupNames.length ? ' (ghi đè ' + dupNames.length + ')' : ''));
+    } catch (err) {
+      ui.fail('✕ Lỗi thêm ảnh: ' + (err.message || err));
+      toast('Lỗi thêm ảnh: ' + (err.message || err));
+    }
+  }
+
   function appendDetailBatch() {
     const grid = $('#ad-grid');
     const frag = document.createDocumentFragment();
@@ -1181,6 +1258,22 @@
     if (!allSel) detailList.forEach(p => detailPicked.add(photoKey(p)));
     updatePickBar(); renderDetail();
   });
+  // Thêm ảnh: nút + ô chọn file ẩn
+  $('#ad-add-photos').addEventListener('click', () => $('#ad-file-input').click());
+  $('#ad-file-input').addEventListener('change', e => { addPhotosToSet(e.target.files); e.target.value = ''; });
+  // Kéo-thả file vào vùng ảnh để thêm
+  (function () {
+    const zone = $('#ad-grid-wrap'); if (!zone) return;
+    let depth = 0;
+    zone.addEventListener('dragenter', e => { if (e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files')) { e.preventDefault(); depth++; zone.classList.add('drop-on'); } });
+    zone.addEventListener('dragover', e => { if (e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files')) e.preventDefault(); });
+    zone.addEventListener('dragleave', () => { depth = Math.max(0, depth - 1); if (!depth) zone.classList.remove('drop-on'); });
+    zone.addEventListener('drop', e => {
+      if (!(e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length)) return;
+      e.preventDefault(); depth = 0; zone.classList.remove('drop-on');
+      addPhotosToSet(e.dataTransfer.files);
+    });
+  })();
   $('#ad-change-cover').addEventListener('click', openCoverModal);
   $('#ad-add-set').addEventListener('click', async () => {
     if (!detailAlbum) return;

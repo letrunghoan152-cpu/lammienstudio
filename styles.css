@@ -756,3 +756,12 @@ img.logo { object-fit: contain; background: #efece5; padding: 2px; }
 .dthumb.pickable.picked { outline: 3px solid var(--brand); outline-offset: -3px; }
 .drow.pickable.picked { background: var(--brand-soft); }
 .dthumb.pickable img { pointer-events: none; }
+
+/* ============== Kéo-thả thêm ảnh vào album ============== */
+.detail-main { position: relative; }
+.detail-main.drop-on { outline: 2px dashed var(--brand); outline-offset: 6px; border-radius: 12px; }
+.detail-main.drop-on::after { content: "Thả ảnh vào đây để thêm vào album"; position: absolute; inset: 0;
+  display: grid; place-items: center; z-index: 5; border-radius: 12px;
+  background: var(--brand-soft); color: var(--brand-200);
+  font-weight: 700; font-size: 15px; pointer-events: none; }
+#dup-modal .modal-foot { flex-wrap: wrap; gap: 8px; }
