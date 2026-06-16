@@ -54,7 +54,7 @@ module.exports = async (req, res) => {
     if (!CID() || !CSECRET()) return res.status(503).send(page('Thiếu cấu hình', '<h3>Chưa cấu hình GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET</h3>'));
     const p = new URLSearchParams({
       client_id: CID(), redirect_uri: redirectUri(req), response_type: 'code', scope: SCOPE,
-      access_type: 'offline', prompt: 'consent', include_granted_scopes: 'true', state: (req.query || {}).state,
+      access_type: 'offline', prompt: 'consent', state: (req.query || {}).state,
     });
     res.writeHead(302, { Location: 'https://accounts.google.com/o/oauth2/v2/auth?' + p.toString() });
     return res.end();
