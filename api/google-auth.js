@@ -33,6 +33,15 @@ module.exports = async (req, res) => {
   if (!configured()) return res.status(503).json({ error: 'Chưa cấu hình máy chủ (Supabase)' });
   const action = (req.query || {}).action;
 
+  // Chẩn đoán: xem máy chủ đang dùng client_id / secret / redirect_uri nào (client_id không phải bí mật)
+  if (action === 'info') {
+    return res.status(200).json({
+      GOOGLE_CLIENT_ID: CID() || '(TRỐNG — chưa set trên Vercel)',
+      has_GOOGLE_CLIENT_SECRET: !!CSECRET(),
+      redirect_uri_can_dang_ky: redirectUri(req),
+    });
+  }
+
   if (action === 'state') {
     const u = await validUser(req.headers['x-user'], req.headers['x-pass']);
     if (!u) return res.status(401).json({ error: 'Chưa đăng nhập' });
