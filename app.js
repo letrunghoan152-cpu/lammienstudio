@@ -343,7 +343,7 @@
   const DRIVE_EMAIL_KEY = 'lamMienDriveEmail';
   const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.email';
   let driveToken = '', driveTokenExp = 0, driveEmail = '';
-  let _tokenClient = null, _tokenResolve = null, _tokenReject = null;
+  let _tokenClient = null, _tokenResolve = null, _tokenReject = null, _tokenTimer = null;
   try { driveEmail = localStorage.getItem(DRIVE_EMAIL_KEY) || ''; } catch (_) {}
 
   function getClientId() { try { return (localStorage.getItem(GCID_KEY) || '').trim(); } catch (_) { return ''; } }
@@ -357,6 +357,7 @@
     _tokenClient = google.accounts.oauth2.initTokenClient({
       client_id: cid, scope: DRIVE_SCOPE,
       callback: resp => {
+        if (_tokenTimer) { clearTimeout(_tokenTimer); _tokenTimer = null; }
         if (resp && resp.access_token) {
           driveToken = resp.access_token;
           driveTokenExp = Date.now() + ((resp.expires_in || 3500) - 60) * 1000;
@@ -365,17 +366,27 @@
         _tokenResolve = _tokenReject = null;
       },
       error_callback: err => {
+        if (_tokenTimer) { clearTimeout(_tokenTimer); _tokenTimer = null; }
         if (_tokenReject) _tokenReject(new Error(err && err.type === 'popup_closed' ? 'Bạn đã đóng cửa sổ liên kết' : (err && err.message) || 'Liên kết thất bại'));
         _tokenResolve = _tokenReject = null;
       }
     });
   }
+  // interactive=true: hiện màn hình cấp quyền (chỉ dùng khi bấm "Liên kết").
+  // interactive=false: lấy token IM LẶNG (không hiện gì) nếu đã từng cấp quyền & còn phiên Google.
   function requestToken(interactive) {
     return new Promise((resolve, reject) => {
       try { buildTokenClient(); } catch (e) { return reject(e); }
       _tokenResolve = resolve; _tokenReject = reject;
-      try { _tokenClient.requestAccessToken({ prompt: interactive ? 'consent' : '' }); }
-      catch (e) { _tokenResolve = _tokenReject = null; reject(e); }
+      const params = interactive ? { prompt: 'consent' } : { prompt: '' };
+      if (!interactive && driveEmail && driveEmail.indexOf('@') > 0) params.hint = driveEmail; // tự chọn đúng tài khoản
+      if (!interactive) {
+        _tokenTimer = setTimeout(() => {
+          if (_tokenReject) { const rj = _tokenReject; _tokenResolve = _tokenReject = null; _tokenTimer = null; rj(new Error('Phiên Google đã hết hạn')); }
+        }, 8000);
+      }
+      try { _tokenClient.requestAccessToken(params); }
+      catch (e) { if (_tokenTimer) { clearTimeout(_tokenTimer); _tokenTimer = null; } _tokenResolve = _tokenReject = null; reject(e); }
     });
   }
   async function ensureDriveToken(interactive) {
@@ -441,7 +452,7 @@
   }
   function driveTokenOrPrompt() {
     if (driveToken && Date.now() < driveTokenExp) return Promise.resolve(driveToken);
-    return ensureDriveToken(true);
+    return ensureDriveToken(false);   // im lặng, không bắt đăng nhập lại
   }
   async function driveTrashFiles(ids) {
     ids = (ids || []).filter(Boolean); if (!ids.length) return;
@@ -698,8 +709,9 @@
     if (!getClientId() || !driveLinked()) { toast('Hãy kết nối Google Drive trước khi upload'); openDriveModal(); return; }
     if (!pickedUploadFiles.length) { toast('Hãy chọn ảnh từ máy'); return; }
     const files = pickedUploadFiles;
-    if (!(driveToken && Date.now() < driveTokenExp)) {   // xin token trong ngữ cảnh cú nhấp (tránh bị chặn popup)
-      try { await ensureDriveToken(true); } catch (e2) { toast('Cần cấp quyền Drive: ' + (e2.message || e2)); return; }
+    if (!(driveToken && Date.now() < driveTokenExp)) {   // lấy token im lặng (không bắt đăng nhập lại)
+      try { await ensureDriveToken(false); }
+      catch (_) { toast('Phiên Google Drive đã hết — bấm “Liên kết tài khoản” một lần nữa'); openDriveModal(); return; }
     }
     closeCreate();                            // đóng popup ngay để làm việc khác
     toast('Đang tải ảnh lên Google Drive…');
