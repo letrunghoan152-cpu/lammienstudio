@@ -60,7 +60,8 @@ module.exports = async (req, res) => {
     return res.end();
   }
 
-  if (action === 'callback') {
+  // Google trả về redirect_uri kèm ?code=&state= (không có action) -> coi là bước callback
+  if (action === 'callback' || (req.query && (req.query.code || req.query.error))) {
     const { code, state, error } = req.query || {};
     if (error) return res.status(400).send(page('Đã huỷ', '<h3>Đã huỷ kết nối</h3><p>' + String(error) + '</p>'));
     if (!okState(state)) return res.status(400).send(page('Lỗi', '<h3>Phiên không hợp lệ</h3>'));
