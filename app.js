@@ -130,6 +130,9 @@
   let detailAlbum = null, detailSet = 'goc', pickingCover = false;
   let detailList = [], detailShown = 0, detailObserver = null;
   let detailSort = 'az', detailView = 'grid';
+  let detailPick = false;
+  const detailPicked = new Set();
+  const photoKey = p => p.driveId || p.id;
   const DETAIL_BATCH = 60;
 
   /* ---------- Helpers ---------- */
@@ -429,6 +432,36 @@
       });
     } catch (_) {}
   }
+  // Chuyển file/thư mục vào thùng rác Drive (chỉ được với thứ do app này tạo — scope drive.file)
+  function driveTrashOne(id, token) {
+    return fetch(`https://www.googleapis.com/drive/v3/files/${id}`, {
+      method: 'PATCH', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ trashed: true })
+    }).then(r => { if (!r.ok) throw new Error(String(r.status)); });
+  }
+  function driveTokenOrPrompt() {
+    if (driveToken && Date.now() < driveTokenExp) return Promise.resolve(driveToken);
+    return ensureDriveToken(true);
+  }
+  async function driveTrashFiles(ids) {
+    ids = (ids || []).filter(Boolean); if (!ids.length) return;
+    let token; try { token = await driveTokenOrPrompt(); } catch (_) { toast('Chưa đăng nhập Drive — ảnh đã xoá trên web nhưng chưa xoá trên Drive'); return; }
+    let ok = 0, fail = 0;
+    await Promise.all(ids.map(id => driveTrashOne(id, token).then(() => ok++).catch(() => fail++)));
+    if (fail) toast(`Drive: đã xoá ${ok}, ${fail} ảnh không xoá được (ảnh không do web tạo)`);
+  }
+  // Lấy tất cả ID thư mục Drive của 1 album (folder gốc + các album con)
+  function albumFolderIds(al) {
+    const ids = [];
+    const a = extractFolderId(al.sourceUrl || ''); if (a) ids.push(a);
+    (al.sets || []).forEach(s => { const f = extractFolderId(s.sourceUrl || ''); if (f) ids.push(f); });
+    return ids;
+  }
+  async function driveTrashAlbum(al) {
+    const ids = albumFolderIds(al); if (!ids.length) return;
+    let token; try { token = await driveTokenOrPrompt(); } catch (_) { return; }
+    await Promise.all(ids.map(id => driveTrashOne(id, token).catch(() => {})));
+  }
   // Upload 1 file kiểu resumable, báo tiến độ qua onDelta(bytesTăngThêm)
   function driveUploadFile(file, folderId, token, onDelta) {
     return new Promise((resolve, reject) => {
@@ -502,17 +535,31 @@
   // ---- Định dạng hiển thị ----
   function fmtSpeed(bps) { if (bps >= 1048576) return (bps / 1048576).toFixed(1) + ' MB/s'; if (bps >= 1024) return (bps / 1024).toFixed(0) + ' KB/s'; return Math.round(bps) + ' B/s'; }
   function fmtEta(sec) { if (!isFinite(sec) || sec <= 0) return '—'; if (sec >= 3600) return Math.floor(sec / 3600) + 'h' + Math.round(sec % 3600 / 60) + 'm'; if (sec >= 60) return Math.floor(sec / 60) + 'm' + Math.round(sec % 60) + 's'; return Math.ceil(sec) + 's'; }
-  const uploadUI = {
-    start(count) { $('#upload-progress').hidden = false; $('#up-stage').textContent = 'Đang tải lên…'; $('#up-fill').style.width = '0%'; $('#up-pct').textContent = '0%'; $('#up-count').textContent = '0 / ' + count + ' ảnh'; $('#up-speed').textContent = '— MB/s'; $('#up-eta').textContent = 'còn —'; },
-    update({ uploaded, total, done, count, speed }) {
-      const pct = total ? Math.min(100, uploaded / total * 100) : 0;
-      $('#up-fill').style.width = pct.toFixed(1) + '%'; $('#up-pct').textContent = Math.round(pct) + '%';
-      $('#up-count').textContent = done + ' / ' + count + ' ảnh'; $('#up-speed').textContent = fmtSpeed(speed);
-      $('#up-eta').textContent = 'còn ' + fmtEta(speed > 0 ? (total - uploaded) / speed : Infinity);
-    },
-    finish() { $('#up-stage').textContent = 'Hoàn tất ✓'; $('#up-fill').style.width = '100%'; $('#up-pct').textContent = '100%'; $('#up-eta').textContent = 'xong'; },
-    hide() { $('#upload-progress').hidden = true; }
-  };
+  // Thanh tiến độ nổi góc dưới-phải: mỗi lần upload là 1 thẻ riêng
+  let _ufSeq = 0;
+  function createUploadItem(name, count) {
+    const stack = $('#upload-stack');
+    const el = document.createElement('div');
+    el.className = 'uf-item'; el.id = 'uf' + (++_ufSeq);
+    el.innerHTML = `<div class="uf-head"><span class="uf-name">${escapeHtml(name)}</span><button class="uf-x" title="Ẩn">×</button></div>
+      <div class="uf-bar"><div class="uf-fill"></div></div>
+      <div class="uf-stats"><span class="uf-pct">0%</span><span class="uf-count">0/${count}</span><span class="uf-speed">—</span><span class="uf-eta">còn —</span></div>`;
+    stack.appendChild(el);
+    el.querySelector('.uf-x').addEventListener('click', () => el.remove());
+    const q = s => el.querySelector(s);
+    return {
+      start(c) { q('.uf-count').textContent = '0/' + c; },
+      update({ uploaded, total, done, count, speed }) {
+        const pct = total ? Math.min(100, uploaded / total * 100) : 0;
+        q('.uf-fill').style.width = pct.toFixed(1) + '%'; q('.uf-pct').textContent = Math.round(pct) + '%';
+        q('.uf-count').textContent = done + '/' + count; q('.uf-speed').textContent = fmtSpeed(speed);
+        q('.uf-eta').textContent = 'còn ' + fmtEta(speed > 0 ? (total - uploaded) / speed : Infinity);
+      },
+      finish() { q('.uf-fill').style.width = '100%'; q('.uf-pct').textContent = '100%'; q('.uf-eta').textContent = 'xong'; },
+      done(msg) { el.classList.add('ok'); q('.uf-name').textContent = msg; q('.uf-eta').textContent = ''; setTimeout(() => el.remove(), 6000); },
+      fail(msg) { el.classList.add('err'); q('.uf-name').textContent = msg; }
+    };
+  }
 
   /* ---------- Wiring: nút kết nối Drive ---------- */
   function openDriveModal() { $('#gcid').value = getClientId(); renderDriveStatus(); $('#drive-modal').classList.add('open'); }
@@ -552,7 +599,7 @@
   function openCreate() {
     $('#create-form').reset();
     $('#allow-notes').checked = true; $('#allow-download').checked = false;
-    pickedUploadFiles = []; renderPickInfo(); uploadUI.hide();
+    pickedUploadFiles = []; renderPickInfo();
     setSource('upload'); renderDriveStatus();
     $('#create-modal').classList.add('open');
   }
@@ -580,47 +627,20 @@
     dz.addEventListener('drop', e => { if (e.dataTransfer && e.dataTransfer.files) addFiles(e.dataTransfer.files); });
   }
 
-  $('#create-form').addEventListener('submit', async e => {
-    e.preventDefault();
-    const btn = $('#create-submit');
-    const rawName = $('#album-name').value.trim();
-    if (!rawName) { toast('Hãy nhập tên khách / mã buổi chụp'); return; }
-
-    let photos = [], sourceUrl = '';
-    if (createSource === 'drive') {
-      const folder = $('#drive-url').value.trim();
-      if (!folder) { toast('Hãy dán link thư mục Google Drive'); return; }
-      try {
-        btn.disabled = true; btn.textContent = 'Đang tải ảnh…'; toast('Đang tải ảnh từ Google Drive…');
-        photos = await buildDrivePhotos(folder, FIXED_DRIVE_KEY); sourceUrl = folder;
-      } catch (err) { toast('Lỗi: ' + (err.message || err)); return; }
-      finally { btn.disabled = false; btn.textContent = 'Tạo album'; }
-    } else {
-      if (!getClientId() || !driveLinked()) { toast('Hãy kết nối Google Drive trước khi upload'); openDriveModal(); return; }
-      if (!pickedUploadFiles.length) { toast('Hãy chọn ảnh từ máy'); return; }
-      try {
-        btn.disabled = true; btn.textContent = 'Đang upload…';
-        const r = await uploadAlbumPhotos(pickedUploadFiles, rawName, uploadUI);
-        photos = r.photos; sourceUrl = 'https://drive.google.com/drive/folders/' + r.folderId;
-      } catch (err) { toast('Lỗi upload: ' + (err.message || err)); btn.disabled = false; btn.textContent = 'Tạo album'; return; }
-      btn.disabled = false; btn.textContent = 'Tạo album';
-    }
-
-    const meta = parseAlbumMeta(rawName);
-    const days = parseInt($('#deadline-days').value, 10);
-    const deadlineDays = Number.isFinite(days) && days >= 0 ? days : 0;
-    const max = parseInt($('#max-count').value, 10);
+  // Tạo bản ghi album từ metadata + ảnh đã có
+  function finalizeAlbum(meta, photos, sourceUrl) {
+    const m = parseAlbumMeta(meta.rawName);
     const al = {
       id: genId(),
-      name: rawName,
-      client: meta.client || '',
+      name: meta.rawName,
+      client: m.client || '',
       status: 'waiting',
-      maxCount: Number.isFinite(max) && max > 0 ? max : 0,
-      allowNotes: $('#allow-notes').checked,
-      allowDownload: $('#allow-download').checked,
-      shootDate: meta.shootDate,
-      shootHour: meta.hour,
-      deadlineDays,
+      maxCount: meta.maxCount,
+      allowNotes: meta.allowNotes,
+      allowDownload: meta.allowDownload,
+      shootDate: m.shootDate,
+      shootHour: m.hour,
+      deadlineDays: meta.deadlineDays,
       deadline: '',        // sẽ tự tính khi khách bấm "Gửi hậu kỳ"
       selectedAt: 0,
       sourceUrl,
@@ -629,8 +649,61 @@
       createdAt: Date.now(), lastActivity: Date.now(),
       photos
     };
-    albums.unshift(al); saveAlbums(al); renderAlbums(); closeCreate();
-    toast(`Đã tạo album “${al.name}” (${photos.length} ảnh)`);
+    albums.unshift(al); saveAlbums(al);
+    if ($('#page-albums').classList.contains('active')) renderAlbums();
+    return al;
+  }
+  // Upload nền: tạo folder, upload có thanh tiến độ nổi, rồi tạo album
+  async function runUploadJob(meta, files) {
+    const ui = createUploadItem(meta.rawName, files.length);
+    try {
+      const r = await uploadAlbumPhotos(files, meta.rawName, ui);
+      finalizeAlbum(meta, r.photos, 'https://drive.google.com/drive/folders/' + r.folderId);
+      ui.done('✓ Đã tạo “' + meta.rawName + '” (' + r.photos.length + ' ảnh)');
+    } catch (err) {
+      ui.fail('✕ Lỗi: ' + meta.rawName);
+      toast('Upload lỗi: ' + (err.message || err));
+    }
+  }
+
+  $('#create-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const btn = $('#create-submit');
+    const rawName = $('#album-name').value.trim();
+    if (!rawName) { toast('Hãy nhập tên khách / mã buổi chụp'); return; }
+    const days = parseInt($('#deadline-days').value, 10);
+    const max = parseInt($('#max-count').value, 10);
+    const meta = {
+      rawName,
+      deadlineDays: Number.isFinite(days) && days >= 0 ? days : 0,
+      maxCount: Number.isFinite(max) && max > 0 ? max : 0,
+      allowNotes: $('#allow-notes').checked,
+      allowDownload: $('#allow-download').checked
+    };
+
+    if (createSource === 'drive') {
+      const folder = $('#drive-url').value.trim();
+      if (!folder) { toast('Hãy dán link thư mục Google Drive'); return; }
+      try {
+        btn.disabled = true; btn.textContent = 'Đang tải ảnh…'; toast('Đang tải ảnh từ Google Drive…');
+        const photos = await buildDrivePhotos(folder, FIXED_DRIVE_KEY);
+        finalizeAlbum(meta, photos, folder); closeCreate();
+        toast(`Đã tạo album “${rawName}” (${photos.length} ảnh)`);
+      } catch (err) { toast('Lỗi: ' + (err.message || err)); }
+      finally { btn.disabled = false; btn.textContent = 'Tạo album'; }
+      return;
+    }
+
+    // Nguồn "Tải từ máy" -> upload chạy nền
+    if (!getClientId() || !driveLinked()) { toast('Hãy kết nối Google Drive trước khi upload'); openDriveModal(); return; }
+    if (!pickedUploadFiles.length) { toast('Hãy chọn ảnh từ máy'); return; }
+    const files = pickedUploadFiles;
+    if (!(driveToken && Date.now() < driveTokenExp)) {   // xin token trong ngữ cảnh cú nhấp (tránh bị chặn popup)
+      try { await ensureDriveToken(true); } catch (e2) { toast('Cần cấp quyền Drive: ' + (e2.message || e2)); return; }
+    }
+    closeCreate();                            // đóng popup ngay để làm việc khác
+    toast('Đang tải ảnh lên Google Drive…');
+    runUploadJob(meta, files);                // không await -> chạy nền
   });
 
   /* ---------- Albums dashboard ---------- */
@@ -803,13 +876,14 @@
   }
   function purgeAlbum(id) {
     const a = albums.find(x => x.id === id);
-    if (!window.confirm(`Xoá vĩnh viễn album “${a ? a.name : ''}”? Không thể lấy lại.`)) return;
+    if (!window.confirm(`Xoá vĩnh viễn album “${a ? a.name : ''}”? Thư mục ảnh trên Google Drive cũng sẽ được chuyển vào thùng rác Drive. Không thể lấy lại trên web.`)) return;
+    if (a) driveTrashAlbum(a);            // đồng bộ xoá thư mục trên Drive (nền)
     albums = albums.filter(x => x.id !== id); saveAlbumsLocal(); apiDeleteAlbum(id); renderTrash(); toast('Đã xoá vĩnh viễn');
   }
   $('#trash-empty').addEventListener('click', () => {
     const list = trashedAlbums(); if (!list.length) return;
-    if (!window.confirm(`Xoá vĩnh viễn ${list.length} album trong thùng rác? Không thể lấy lại.`)) return;
-    list.forEach(a => apiDeleteAlbum(a.id));
+    if (!window.confirm(`Xoá vĩnh viễn ${list.length} album trong thùng rác? Thư mục ảnh trên Google Drive cũng sẽ được chuyển vào thùng rác Drive. Không thể lấy lại.`)) return;
+    list.forEach(a => { driveTrashAlbum(a); apiDeleteAlbum(a.id); });
     albums = activeAlbums(); saveAlbumsLocal(); renderTrash(); toast('Đã dọn sạch thùng rác');
   });
 
@@ -852,7 +926,7 @@
       div.innerHTML = `<span class="set-label">${escapeHtml(r.name)}</span><span class="cnt">${r.count}</span>` +
         `<button class="set-dl" title="Tải .zip">${ICN_DL}</button>` +
         (r.fixed ? '' : `<button class="set-edit" title="Đổi tên album">${ICN_EDIT}</button><button class="set-del" title="Xoá album">${ICN_XX}</button>`);
-      div.addEventListener('click', () => { detailSet = r.key; renderDetail(); });
+      div.addEventListener('click', () => { if (detailPick) { detailPick = false; detailPicked.clear(); $('#ad-pickbar').hidden = true; $('#ad-pick').classList.remove('active'); $('#ad-pick').textContent = 'Chọn'; } detailSet = r.key; renderDetail(); });
       div.querySelector('.set-dl').addEventListener('click', e => { e.stopPropagation(); zipDownloadSet(setList(r.key), zipName(r.key), e.currentTarget); });
       if (!r.fixed) {
         div.querySelector('.set-edit').addEventListener('click', e => { e.stopPropagation(); renameSet(r.key); });
@@ -889,6 +963,8 @@
     }
     detailList = list.slice().sort((a, b) => (detailSort === 'az' ? 1 : -1) * String(a.name).localeCompare(String(b.name), undefined, { numeric: true }));
     $('#ad-set-title').textContent = title;
+    $('#ad-pick').style.display = detailSet === 'chon' ? 'none' : '';
+    $('#ad-pickbar').hidden = !(detailPick && detailSet !== 'chon');
     $('#ad-sort').textContent = detailSort === 'az' ? 'A→Z' : 'Z→A';
     $$('#ad-view button').forEach(b => b.classList.toggle('active', b.dataset.v === detailView));
     $('#ad-grid').classList.toggle('list-view', detailView === 'list');
@@ -917,25 +993,70 @@
   }
   function buildDetailThumb(p, idx) {
     const ext = (String(p.name).split('.').pop() || 'IMG').toUpperCase().slice(0, 4);
+    const picked = detailPick && detailPicked.has(photoKey(p));
     const d = document.createElement('div');
-    d.className = 'dthumb' + (p.selected ? ' sel' : '');
-    d.innerHTML = `<img src="${escapeAttr(p.src)}" alt="" loading="lazy" decoding="async"><span class="dtag">${escapeHtml(ext)}</span>${p.selected ? '<span class="dheart">♥</span>' : ''}`;
+    d.className = 'dthumb' + (p.selected ? ' sel' : '') + (detailPick ? ' pickable' : '') + (picked ? ' picked' : '');
+    d.innerHTML = `<img src="${escapeAttr(p.src)}" alt="" loading="lazy" decoding="async"><span class="dtag">${escapeHtml(ext)}</span>${p.selected ? '<span class="dheart">♥</span>' : ''}${detailPick ? '<span class="pickbox"></span>' : ''}`;
     attachImgFallback(d.querySelector('img'), p);
-    d.addEventListener('click', () => openLightbox(detailList, idx, 'view'));
+    d.addEventListener('click', () => { if (detailPick) togglePickOne(p, d); else openLightbox(detailList, idx, 'view'); });
     return d;
   }
   function buildDetailRow(p, idx) {
     const ext = (String(p.name).split('.').pop() || 'IMG').toUpperCase().slice(0, 4);
+    const picked = detailPick && detailPicked.has(photoKey(p));
     const d = document.createElement('div');
-    d.className = 'drow' + (p.selected ? ' sel' : '');
-    d.innerHTML = `<img src="${escapeAttr(p.src)}" alt="" loading="lazy" decoding="async">
+    d.className = 'drow' + (p.selected ? ' sel' : '') + (detailPick ? ' pickable' : '') + (picked ? ' picked' : '');
+    d.innerHTML = `${detailPick ? '<span class="pickbox"></span>' : ''}<img src="${escapeAttr(p.src)}" alt="" loading="lazy" decoding="async">
       <span class="nm">${escapeHtml(p.name)}</span>
       ${p.note ? '<span title="' + escapeAttr(p.note) + '">📝</span>' : ''}
       ${p.selected ? '<span class="hrt">♥</span>' : ''}
       <span class="ext">${escapeHtml(ext)}</span>`;
     attachImgFallback(d.querySelector('img'), p);
-    d.addEventListener('click', () => openLightbox(detailList, idx, 'view'));
+    d.addEventListener('click', () => { if (detailPick) togglePickOne(p, d); else openLightbox(detailList, idx, 'view'); });
     return d;
+  }
+  function togglePickOne(p, el) {
+    const k = photoKey(p);
+    if (detailPicked.has(k)) { detailPicked.delete(k); el.classList.remove('picked'); }
+    else { detailPicked.add(k); el.classList.add('picked'); }
+    updatePickBar();
+  }
+  function updatePickBar() {
+    $('#ad-pick-n').textContent = detailPicked.size;
+    $('#ad-pick-del').disabled = !detailPicked.size;
+  }
+  function currentSetArray() {
+    const al = detailAlbum;
+    if (detailSet === 'goc') return al.photos;
+    if (detailSet === 'chon') return null;             // "Ảnh chọn" là view dẫn xuất, không xoá ở đây
+    const s = al.sets.find(x => x.id === detailSet);
+    if (!s) return null;
+    if (!Array.isArray(s.photos)) s.photos = [];
+    return s.photos;
+  }
+  function togglePick(on) {
+    detailPick = on; detailPicked.clear();
+    $('#ad-pickbar').hidden = !on;
+    $('#ad-pick').classList.toggle('active', on);
+    $('#ad-pick').textContent = on ? 'Xong' : 'Chọn';
+    updatePickBar();
+    renderDetail();
+  }
+  async function deletePicked() {
+    const arr = currentSetArray(); if (!arr) return;
+    const toDel = arr.filter(p => detailPicked.has(photoKey(p)));
+    if (!toDel.length) return;
+    if (!window.confirm(`Xoá ${toDel.length} ảnh khỏi album? Ảnh tương ứng cũng sẽ được chuyển vào thùng rác Google Drive.`)) return;
+    const delKeys = new Set(toDel.map(photoKey));
+    const kept = arr.filter(p => !delKeys.has(photoKey(p)));
+    if (detailSet === 'goc') detailAlbum.photos = kept;
+    else { const s = detailAlbum.sets.find(x => x.id === detailSet); if (s) s.photos = kept; }
+    // nếu ảnh bìa bị xoá -> bỏ bìa
+    if (detailAlbum.cover && toDel.some(p => detailAlbum.cover === (p.full || p.src) || (p.driveId && detailAlbum.cover.indexOf(p.driveId) >= 0))) detailAlbum.cover = '';
+    detailAlbum.lastActivity = Date.now(); saveAlbums(detailAlbum);
+    togglePick(false); renderAlbums();
+    toast(`Đã xoá ${toDel.length} ảnh`);
+    driveTrashFiles(toDel.map(p => p.driveId).filter(Boolean));   // đồng bộ xoá trên Drive (nền)
   }
   function appendDetailBatch() {
     const grid = $('#ad-grid');
@@ -1039,6 +1160,15 @@
   });
   $('#ad-sort').addEventListener('click', () => { detailSort = detailSort === 'az' ? 'za' : 'az'; renderDetail(); });
   $$('#ad-view button').forEach(b => b.addEventListener('click', () => { detailView = b.dataset.v; renderDetail(); }));
+  $('#ad-pick').addEventListener('click', () => togglePick(!detailPick));
+  $('#ad-pick-cancel').addEventListener('click', () => togglePick(false));
+  $('#ad-pick-del').addEventListener('click', deletePicked);
+  $('#ad-pick-all').addEventListener('click', () => {
+    const allSel = detailList.every(p => detailPicked.has(photoKey(p)));
+    detailPicked.clear();
+    if (!allSel) detailList.forEach(p => detailPicked.add(photoKey(p)));
+    updatePickBar(); renderDetail();
+  });
   $('#ad-change-cover').addEventListener('click', openCoverModal);
   $('#ad-add-set').addEventListener('click', async () => {
     if (!detailAlbum) return;

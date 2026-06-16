@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <script>try{document.documentElement.setAttribute('data-theme',localStorage.getItem('lamMienTheme')||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}</script>
-  <link rel="stylesheet" href="styles.css?v=20260616a">
+  <link rel="stylesheet" href="styles.css?v=20260616b">
   <link rel="icon" href="logo.svg">
 </head>
 <body>
@@ -207,11 +207,19 @@
             <div class="detail-grid-head">
               <h2 id="ad-set-title">ẢNH GỐC</h2>
               <span class="grow"></span>
+              <button class="btn ghost sm" id="ad-pick" title="Chọn ảnh để xoá">Chọn</button>
               <button class="btn ghost sm" id="ad-sort" title="Đổi chiều sắp xếp">A→Z</button>
               <div class="seg mini" id="ad-view">
                 <button data-v="grid" class="active" title="Xem dạng lưới"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></button>
                 <button data-v="list" title="Xem dạng danh sách"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg></button>
               </div>
+            </div>
+            <div class="detail-pickbar" id="ad-pickbar" hidden>
+              <span><b id="ad-pick-n">0</b> ảnh đã chọn</span>
+              <span class="grow"></span>
+              <button class="btn ghost sm" id="ad-pick-all">Chọn tất cả</button>
+              <button class="btn danger sm" id="ad-pick-del">Xoá ảnh</button>
+              <button class="btn ghost sm" id="ad-pick-cancel">Huỷ</button>
             </div>
             <div class="detail-grid" id="ad-grid"></div>
           </div>
@@ -361,12 +369,7 @@
               <span>hoặc <u>bấm để chọn ảnh</u> từ máy tính</span>
             </div>
             <div class="pick-info" id="pick-info" hidden></div>
-            <div class="upload-progress" id="upload-progress" hidden>
-              <div class="up-row"><span id="up-stage">Đang tải lên…</span><span id="up-pct">0%</span></div>
-              <div class="up-bar"><div class="up-fill" id="up-fill"></div></div>
-              <div class="up-stats"><span id="up-count">0 / 0 ảnh</span><span id="up-speed">— MB/s</span><span id="up-eta">còn — </span></div>
-            </div>
-            <span class="hint" id="upload-hint">Ảnh sẽ được upload thẳng lên Google Drive đã liên kết và tự chia sẻ “Bất kỳ ai có link”.</span>
+            <span class="hint" id="upload-hint">Bấm “Tạo album”, popup sẽ tự đóng và hiện thanh tải lên ở góc dưới — bạn có thể làm việc khác trong lúc ảnh đang upload lên Google Drive.</span>
           </div>
 
           <div class="src-pane" id="pane-drive" hidden>
@@ -507,8 +510,9 @@
   </div>
 
   <div class="toast" id="toast"></div>
+  <div class="upload-stack" id="upload-stack"></div>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <script src="app.js?v=20260616a"></script>
+  <script src="app.js?v=20260616b"></script>
 </body>
 </html>
