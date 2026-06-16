@@ -1557,6 +1557,9 @@
     clearTimeout(saveClientTimer);
     saveClientTimer = setTimeout(() => { saveClientTimer = 1; flushSaveClient(); }, 500);
   }
+  // Lưu nốt thay đổi đang chờ khi khách rời/ẩn tab (đóng nốt khe 500ms cuối khi F5/thoát)
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushSaveClient(); });
+  window.addEventListener('pagehide', flushSaveClient);
   window.addEventListener('pagehide', flushSaveClient);
   document.addEventListener('visibilitychange', () => { if (document.hidden) flushSaveClient(); });
   function cSel() { return clientAlbum ? clientAlbum.photos.filter(p => p.review === 'selected') : []; }
