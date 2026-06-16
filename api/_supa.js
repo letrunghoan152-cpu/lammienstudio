@@ -25,9 +25,6 @@ async function supa(path, opts = {}) {
   return t ? JSON.parse(t) : null;
 }
 
-function staffUser() { return process.env.STAFF_USER || 'lammien'; }
-function staffPass() { return process.env.STAFF_PASS || 'lammien'; }
-
 /* ---- Cấu hình dùng chung (bảng app_config: key text PK, value jsonb) ---- */
 async function getConfig(key) {
   const rows = await supa(`app_config?key=eq.${encodeURIComponent(key)}&select=value`);
@@ -79,15 +76,14 @@ async function staffList() {
 // Trả về {user, name} nếu hợp lệ; null nếu sai
 async function validUser(user, pass) {
   if (!user || !pass) return null;
-  // Tài khoản chủ (env trên Vercel) luôn đăng nhập được — không bao giờ tự khoá mình
-  if (user === staffUser() && pass === staffPass()) return { user, name: 'Chủ studio' };
+  // CHỈ chấp nhận tài khoản từ Google Sheet — không có tài khoản mặc định/hardcode
   try {
     const list = await staffList();
     if (list) {
       const f = list.find(a => a.active && a.user === user && a.pass === pass);
       if (f) return { user: f.user, name: f.name || f.user };
     }
-  } catch (_) { /* sheet lỗi -> chỉ tài khoản chủ đăng nhập được */ }
+  } catch (_) { /* sheet lỗi -> không ai đăng nhập được (an toàn) */ }
   return null;
 }
 
@@ -111,4 +107,4 @@ async function sendStudioEmail(subject, html) {
   } catch (_) { return false; }
 }
 
-module.exports = { supa, configured, checkAuth, validUser, staffUser, staffPass, sendStudioEmail, getConfig, setConfig };
+module.exports = { supa, configured, checkAuth, validUser, sendStudioEmail, getConfig, setConfig };

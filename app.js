@@ -9,8 +9,6 @@
   const AUTH_KEY = 'lamMienAuth';
   const DKEY = 'lamMienDriveKey';
   const BRAND_KEY = 'lamMienBrand';
-  const LOGIN_USER = 'lammien';
-  const LOGIN_PASS = 'lammien';
   const FIXED_DRIVE_KEY = 'AIzaSyB30IdJg_FKZpi2oOmF8bS7qMEna5P2dpg';
   const API_AUTH_KEY = 'lamMienApiAuth';
   const MIGRATED_KEY = 'lamMienMigrated';
@@ -227,32 +225,26 @@
     const u = $('#lg-user').value.trim(), p = $('#lg-pass').value;
     const btn = $('#login-form button[type="submit"]');
     btn.disabled = true; btn.textContent = 'Đang đăng nhập…';
-    let viaApi = false;
+    // Chỉ đăng nhập qua máy chủ bằng tài khoản trong Google Sheet — không có tài khoản mặc định
     try {
       const r = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user: u, pass: p }) });
-      if (r.ok) {
-        const d = await r.json();
-        apiAuth = { u, p, name: d.name || u };
-        try { localStorage.setItem(API_AUTH_KEY, JSON.stringify(apiAuth)); } catch (_) {}
-        viaApi = true;
-        checkStudioDrive();   // biết studio đã kết nối Drive chưa
-        if (d.sync) { await refreshAlbumsFromServer(); }
-        else toast('Máy chủ chưa nối database — dữ liệu chỉ lưu trên máy này');
-      } else if (r.status === 401) {
+      if (!r.ok) {
         btn.disabled = false; btn.textContent = 'Đăng nhập';
-        toast('Sai tài khoản hoặc mật khẩu'); return;
+        toast(r.status === 401 ? 'Sai tài khoản hoặc mật khẩu' : 'Lỗi máy chủ, thử lại sau'); return;
       }
-    } catch (_) { /* API không chạy (mở file local) -> fallback */ }
-    if (!viaApi) {
-      if (u !== LOGIN_USER || p !== LOGIN_PASS) {
-        btn.disabled = false; btn.textContent = 'Đăng nhập';
-        toast('Sai tài khoản hoặc mật khẩu'); return;
-      }
-      toast('Chế độ offline — dữ liệu chỉ lưu trên máy này');
+      const d = await r.json();
+      apiAuth = { u, p, name: d.name || u };
+      try { localStorage.setItem(API_AUTH_KEY, JSON.stringify(apiAuth)); } catch (_) {}
+      checkStudioDrive();   // biết studio đã kết nối Drive chưa
+      if (d.sync) { await refreshAlbumsFromServer(); }
+      else toast('Máy chủ chưa nối database');
+    } catch (_) {
+      btn.disabled = false; btn.textContent = 'Đăng nhập';
+      toast('Không kết nối được máy chủ — kiểm tra mạng rồi thử lại'); return;
     }
     try { localStorage.setItem(AUTH_KEY, '1'); } catch (_) {}
     btn.disabled = false; btn.textContent = 'Đăng nhập';
-    showApp(); if (viaApi && apiSync) toast('Đăng nhập thành công — dữ liệu đồng bộ mọi thiết bị');
+    showApp(); if (apiSync) toast('Đăng nhập thành công — dữ liệu đồng bộ mọi thiết bị');
   });
   $('#logout-btn').addEventListener('click', () => {
     try { localStorage.removeItem(AUTH_KEY); localStorage.removeItem(API_AUTH_KEY); } catch (_) {}
