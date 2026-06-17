@@ -68,7 +68,7 @@
         const localById = {}; albums.forEach(a => { if (a.id) localById[a.id] = a; });
         const merged = list.map(sv => {
           const lo = localById[sv.id];
-          if (lo && (lo.lastActivity || 0) > (sv.lastActivity || 0)) { apiPushAlbum(lo); return lo; }
+          if (lo && (lo.uploading || (lo.lastActivity || 0) > (sv.lastActivity || 0))) { apiPushAlbum(lo); return lo; }
           return sv;
         });
         albums = merged.concat(recent);
@@ -727,10 +727,12 @@
     if (_liveTimer) return;
     _liveTimer = setTimeout(() => {
       _liveTimer = null;
+      // đảm bảo detailAlbum vẫn trỏ tới đúng object đang nhận ảnh
+      if (detailAlbum && detailAlbum.id === albumId) { const live = albums.find(a => a.id === albumId); if (live) detailAlbum = live; }
       if ($('#page-albums').classList.contains('active')) renderAlbums();
       else if ($('#page-progress').classList.contains('active')) renderProgress();
       if (detailAlbum && detailAlbum.id === albumId && $('#page-albumdetail').classList.contains('active')) renderDetail();
-    }, 600);
+    }, 400);
   }
   // Upload nền: TẠO ALBUM HIỂN THỊ NGAY, ảnh hiện dần theo thời gian thực
   async function runUploadJob(meta, files) {
@@ -998,9 +1000,9 @@
       apiGetAlbum(id).then(fresh => {
         const idx = albums.findIndex(x => x.id === id);
         const local = idx >= 0 ? albums[idx] : detailAlbum;
-        // Tránh đua thời gian: nếu bản local vừa được sửa (bìa/album…) mới hơn bản máy chủ
-        // thì giữ local, không ghi đè bằng dữ liệu cũ vừa tải về.
-        if (local && (local.lastActivity || 0) > (fresh.lastActivity || 0)) return;
+        // Tránh đua thời gian: nếu bản local đang upload, hoặc vừa sửa (bìa/album…) mới hơn
+        // bản máy chủ thì giữ local, không ghi đè bằng dữ liệu cũ vừa tải về.
+        if (local && (local.uploading || (local.lastActivity || 0) > (fresh.lastActivity || 0))) return;
         if (idx >= 0) { albums[idx] = fresh; saveAlbumsLocal(); }
         if (detailAlbum && detailAlbum.id === id) { detailAlbum = fresh; renderDetail(); }
       }).catch(() => {});
