@@ -14,7 +14,12 @@ module.exports = async (req, res) => {
     if (!rows || !rows.length) return res.status(404).json({ error: 'Không tìm thấy album' });
     const data = rows[0].data;
 
-    if (req.method === 'GET') return res.status(200).json(data);
+    if (req.method === 'GET') {
+      // Bảo mật: KHÔNG bao giờ gửi ghi chú nội bộ cho khách
+      const pub = Object.assign({}, data);
+      delete pub.internalNotes; delete pub.internal_notes;
+      return res.status(200).json(pub);
+    }
 
     if (req.method === 'POST') {
       const { review, status } = req.body || {};

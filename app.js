@@ -95,6 +95,7 @@
   let albums = [];
   let brand = { name: 'Lam Miên Studio', welcome: 'Chọn những khoảnh khắc bạn yêu thích' };
   let currentFilter = 'all';
+  let starredOnly = false;
   let albumsView = 'grid', progView = 'list';
   let currentSource = 'drive';
   let pickedFiles = [];
@@ -257,10 +258,12 @@
   $$('.sb-nav a').forEach(a => a.addEventListener('click', () => {
     const page = a.dataset.page;
     $$('.sb-nav a').forEach(x => x.classList.toggle('active', x === a));
-    $$('.page').forEach(p => p.classList.toggle('active', p.id === 'page-' + page));
+    const pageId = page === 'starred' ? 'page-albums' : ('page-' + page);
+    $$('.page').forEach(p => p.classList.toggle('active', p.id === pageId));
     setSidebar(false);
     window.scrollTo({ top: 0 });
-    if (page === 'albums') renderAlbums();
+    starredOnly = (page === 'starred');
+    if (page === 'albums' || page === 'starred') renderAlbums();
     if (page === 'progress') renderProgress();
     if (page === 'trash') renderTrash();
   }));
@@ -839,9 +842,13 @@
     const grid = $('#albums-grid'), empty = $('#albums-empty');
     grid.innerHTML = '';
     grid.className = 'albums-grid' + (albumsView === 'list' ? ' listv' : '');
-    const act = activeAlbums();
+    let act = activeAlbums();
+    if (starredOnly) act = act.filter(a => a.starred);
     const list = act.filter(a => currentFilter === 'all' || a.status === currentFilter);
-    if (!act.length) { empty.hidden = false; grid.hidden = true; return; }
+    if (!act.length) {
+      if (starredOnly) { empty.hidden = true; grid.hidden = false; grid.innerHTML = `<p class="sub" style="color:var(--muted)">Chưa có album nào được gắn dấu sao. Bấm ★ trên thẻ album để gắn.</p>`; return; }
+      empty.hidden = false; grid.hidden = true; return;
+    }
     empty.hidden = true; grid.hidden = false;
     if (!list.length) { grid.innerHTML = `<p class="sub" style="color:var(--muted)">Không có album ở trạng thái này.</p>`; return; }
 
@@ -852,12 +859,15 @@
     const st = statusOf(al.status);
     const sel = selCount(al);
     const total = al.photos.length;
+    const sets = al.sets || [];
+    const folders = 1 + sets.length;
+    const allPhotos = total + sets.reduce((s, x) => s + ((x.photos || []).length), 0);
     const cover = albumCover(al);
     const pct = total ? Math.round(sel / total * 100) : 0;
     const card = document.createElement('div');
     card.className = 'acard';
     card.innerHTML = `
-      <div class="acard-cover">${cover ? `<img src="${escapeAttr(cover)}" alt="" loading="lazy" style="object-position:${escapeAttr(al.coverPos || '50% 50%')}">` : '<span class="ph">🖼️</span>'}${al.uploading ? `<span class="uploading-badge"><span class="spin"></span>Đang tải ${al.photos.length}/${al.uploadTotal || 0}</span>` : ''}</div>
+      <div class="acard-cover">${cover ? `<img src="${escapeAttr(cover)}" alt="" loading="lazy" style="object-position:${escapeAttr(al.coverPos || '50% 50%')}">` : '<span class="ph">🖼️</span>'}${al.uploading ? `<span class="uploading-badge"><span class="spin"></span>Đang tải ${al.photos.length}/${al.uploadTotal || 0}</span>` : ''}<button class="acard-star${al.starred ? ' on' : ''}" data-act="star" title="Gắn dấu sao"><svg viewBox="0 0 24 24"><path d="M12 2l3 6.5 7 .9-5 4.8 1.3 7L12 18l-6.6 3.2L6.7 14l-5-4.8 7-.9z"/></svg></button></div>
       <div class="acard-body">
         <div class="acard-top">
           <div class="status">
@@ -870,7 +880,7 @@
             <button class="icon-btn" data-act="more" title="Thêm"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button>
             <div class="popmenu" hidden>
               <button data-m="preview"><svg viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>Xem trước trang chọn</button>
-              <button data-m="rename"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>Đổi tên / khách</button>
+              <button data-m="rename"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>Chỉnh sửa</button>
               <button data-m="link"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg>Sao chép link</button>
               <button data-m="del" class="danger"><svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M6 6l1 14a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-14"/></svg>Xoá album</button>
             </div>
@@ -879,8 +889,8 @@
         <div class="acard-title">${escapeHtml(al.name)}</div>
         <div class="acard-client">${al.client ? escapeHtml(al.client) : '—'}</div>
         <div class="acard-links">
-          <span class="tag-link" data-act="orig"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Ảnh gốc (${total})</span>
-          <span class="tag-link add" data-act="addfolder"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Thêm thư mục ảnh</span>
+          <span class="tag-link" data-act="orig"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>${folders} thư mục · ${allPhotos} ảnh</span>
+          ${al.lockPhone ? `<span class="tag-link lock"><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>Mã: ${escapeHtml(al.lockPhone)}</span>` : ''}
         </div>
         <div class="acard-progress">
           <div class="lab">Đã chọn ảnh: ${sel} / ${al.maxCount || total}<span class="edit" data-act="editmax" title="Sửa số tối đa">✎</span></div>
@@ -911,15 +921,21 @@
     const popmenu = card.querySelector('.popmenu');
     card.querySelector('[data-act="more"]').addEventListener('click', e => { e.stopPropagation(); closeMenus(); popmenu.hidden = false; });
     popmenu.querySelector('[data-m="preview"]').addEventListener('click', () => openClient(al, true));
-    popmenu.querySelector('[data-m="rename"]').addEventListener('click', () => renameAlbum(al));
+    popmenu.querySelector('[data-m="rename"]').addEventListener('click', () => openEditModal(al));
     popmenu.querySelector('[data-m="link"]').addEventListener('click', () => copyAlbumLink(al));
     popmenu.querySelector('[data-m="del"]').addEventListener('click', () => deleteAlbum(al.id));
+
+    // gắn dấu sao
+    card.querySelector('[data-act="star"]').addEventListener('click', e => {
+      e.stopPropagation();
+      al.starred = !al.starred; al.lastActivity = Date.now(); saveAlbums(al); renderAlbums();
+      toast(al.starred ? 'Đã gắn dấu sao' : 'Đã bỏ dấu sao');
+    });
 
     // links
     card.querySelector('[data-act="orig"]').addEventListener('click', () => {
       if (al.sourceUrl) window.open(al.sourceUrl, '_blank'); else toast('Album này không có thư mục Drive nguồn');
     });
-    card.querySelector('[data-act="addfolder"]').addEventListener('click', () => toast('Tính năng thêm thư mục sẽ được bổ sung sau'));
     card.querySelector('[data-act="editmax"]').addEventListener('click', () => editMax(al));
     card.querySelector('[data-act="download"]').addEventListener('change', e => { al.allowDownload = e.target.checked; al.lastActivity = Date.now(); saveAlbums(al); });
 
@@ -933,12 +949,45 @@
   function closeMenus() { $$('.status-menu, .popmenu').forEach(m => m.hidden = true); }
   document.addEventListener('click', () => closeMenus());
 
-  function renameAlbum(al) {
-    const name = window.prompt('Tên album:', al.name); if (name === null) return;
-    const client = window.prompt('Tên khách (có thể để trống):', al.client || '');
-    al.name = name.trim() || al.name; if (client !== null) al.client = client.trim();
-    al.lastActivity = Date.now(); saveAlbums(al); renderAlbums(); toast('Đã cập nhật');
+  // Chỉnh sửa toàn bộ thông tin album
+  let editingAlbum = null;
+  function openEditModal(al) {
+    editingAlbum = al;
+    $('#ed-name').value = al.name || '';
+    $('#ed-days').value = al.deadlineDays || '';
+    $('#ed-max').value = al.maxCount || '';
+    $('#ed-notes').checked = !!al.allowNotes;
+    $('#ed-download').checked = !!al.allowDownload;
+    $('#ed-lock-on').checked = !!al.lockPhone;
+    $('#ed-lock-phone').value = al.lockPhone || '';
+    $('#ed-lock-phone').hidden = !al.lockPhone;
+    $('#ed-internal').value = al.internalNotes || '';
+    $('#edit-modal').classList.add('open');
   }
+  function closeEdit() { $('#edit-modal').classList.remove('open'); editingAlbum = null; }
+  $('#edit-close') && $('#edit-close').addEventListener('click', closeEdit);
+  $('#edit-cancel') && $('#edit-cancel').addEventListener('click', closeEdit);
+  $('#edit-modal') && $('#edit-modal').addEventListener('click', e => { if (e.target.id === 'edit-modal') closeEdit(); });
+  $('#ed-lock-on') && $('#ed-lock-on').addEventListener('change', e => { $('#ed-lock-phone').hidden = !e.target.checked; if (e.target.checked) $('#ed-lock-phone').focus(); });
+  $('#edit-form') && $('#edit-form').addEventListener('submit', e => {
+    e.preventDefault();
+    const al = editingAlbum; if (!al) return;
+    const name = $('#ed-name').value.trim(); if (!name) { toast('Hãy nhập tên khách / mã buổi chụp'); return; }
+    al.name = name;
+    const m = parseAlbumMeta(name);
+    al.client = m.client || '';
+    if (m.shootDate) al.shootDate = m.shootDate;
+    if (m.hour != null) al.shootHour = m.hour;
+    const days = parseInt($('#ed-days').value, 10); al.deadlineDays = Number.isFinite(days) && days >= 0 ? days : 0;
+    const max = parseInt($('#ed-max').value, 10); al.maxCount = Number.isFinite(max) && max > 0 ? max : 0;
+    al.allowNotes = $('#ed-notes').checked;
+    al.allowDownload = $('#ed-download').checked;
+    al.lockPhone = $('#ed-lock-on').checked ? ($('#ed-lock-phone').value || '').replace(/\D/g, '') : '';
+    al.internalNotes = $('#ed-internal').value;
+    al.lastActivity = Date.now(); saveAlbums(al);
+    closeEdit(); renderAlbums(); if (detailAlbum && detailAlbum.id === al.id) renderDetail();
+    toast('Đã lưu thay đổi');
+  });
   function editMax(al) {
     const v = window.prompt('Số ảnh tối đa khách được chọn (0 = không giới hạn):', al.maxCount || 0);
     if (v === null) return;
@@ -1013,6 +1062,8 @@
         // Tránh đua thời gian: nếu bản local đang upload, hoặc vừa sửa (bìa/album…) mới hơn
         // bản máy chủ thì giữ local, không ghi đè bằng dữ liệu cũ vừa tải về.
         if (local && (local.uploading || (local.lastActivity || 0) > (fresh.lastActivity || 0))) return;
+        // Ghi chú nội bộ bị máy chủ ẩn khỏi API khách -> giữ lại bản local cho studio
+        if (local && local.internalNotes != null && fresh.internalNotes == null) fresh.internalNotes = local.internalNotes;
         if (idx >= 0) { albums[idx] = fresh; saveAlbumsLocal(); }
         if (detailAlbum && detailAlbum.id === id) { detailAlbum = fresh; renderDetail(); }
       }).catch(() => {});
@@ -1270,7 +1321,7 @@
     }, { rootMargin: '800px' });
     detailObserver.observe(s);
   }
-  $('#ad-back').addEventListener('click', () => { gotoPage('page-albums'); renderAlbums(); });
+  $('#ad-back').addEventListener('click', () => { starredOnly = false; $$('.sb-nav a').forEach(x => x.classList.toggle('active', x.dataset.page === 'albums')); gotoPage('page-albums'); renderAlbums(); });
 
   /* ---------- Tải & nén .zip (cho studio) ---------- */
   function setList(set) {
