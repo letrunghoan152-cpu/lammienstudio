@@ -554,8 +554,9 @@
       createImageBitmap(file).then(bm => { const d = { w: bm.width, h: bm.height }; if (bm.close) bm.close(); resolve(d); }).catch(() => resolve({ w: 0, h: 0 }));
     });
   }
-  // Upload danh sách file vào 1 thư mục có sẵn (song song 3 luồng) + tiến độ tổng / tốc độ / ETA
-  async function uploadFilesToFolder(files, folderId, token, ui) {
+  // Upload danh sách file vào 1 thư mục có sẵn (song song 3 luồng) + tiến độ tổng / tốc độ / ETA.
+  // onPhoto(photo, index): gọi ngay khi MỖI ảnh upload xong -> để hiện ảnh theo thời gian thực.
+  async function uploadFilesToFolder(files, folderId, token, ui, onPhoto) {
     const total = files.reduce((s, f) => s + f.size, 0);
     let uploaded = 0, done = 0, idx = 0;
     const startT = Date.now();
@@ -574,7 +575,9 @@
         try {
           const id = await driveUploadFile(file, folderId, token, d => { uploaded += d; });
           await driveShareAnyone(id, token);
-          results[i] = { id: 'a' + id, name: file.name, driveId: id, w: dim.w, h: dim.h, src: driveThumb(id, 'w400'), full: driveThumb(id, 'w1600'), selected: false, note: '' };
+          const photo = { id: 'a' + id, name: file.name, driveId: id, w: dim.w, h: dim.h, src: driveThumb(id, 'w400'), full: driveThumb(id, 'w1600'), selected: false, note: '' };
+          results[i] = photo;
+          if (onPhoto) { try { onPhoto(photo, i); } catch (_) {} }
         } catch (_) { results[i] = null; }
         done++; tick();
       }
@@ -693,9 +696,9 @@
   }
 
   // Tạo bản ghi album từ metadata + ảnh đã có
-  function finalizeAlbum(meta, photos, sourceUrl) {
+  function finalizeAlbum(meta, photos, sourceUrl, extra) {
     const m = parseAlbumMeta(meta.rawName);
-    const al = {
+    const al = Object.assign({
       id: genId(),
       name: meta.rawName,
       client: m.client || '',
@@ -713,19 +716,49 @@
       editedPhotos: [],
       createdAt: Date.now(), lastActivity: Date.now(),
       photos
-    };
+    }, extra || {});
     albums.unshift(al); saveAlbums(al);
     if ($('#page-albums').classList.contains('active')) renderAlbums();
     return al;
   }
-  // Upload nền: tạo folder, upload có thanh tiến độ nổi, rồi tạo album
+  // Gom các lần cập nhật realtime lại (≤ mỗi 600ms) để không nháy/giật khi upload
+  let _liveTimer = null;
+  function scheduleLiveRefresh(albumId) {
+    if (_liveTimer) return;
+    _liveTimer = setTimeout(() => {
+      _liveTimer = null;
+      if ($('#page-albums').classList.contains('active')) renderAlbums();
+      else if ($('#page-progress').classList.contains('active')) renderProgress();
+      if (detailAlbum && detailAlbum.id === albumId && $('#page-albumdetail').classList.contains('active')) renderDetail();
+    }, 600);
+  }
+  // Upload nền: TẠO ALBUM HIỂN THỊ NGAY, ảnh hiện dần theo thời gian thực
   async function runUploadJob(meta, files) {
     const ui = createUploadItem(meta.rawName, files.length);
+    const album = finalizeAlbum(meta, [], '', { uploading: true, uploadTotal: files.length });
     try {
-      const r = await uploadAlbumPhotos(files, meta.rawName, ui);
-      finalizeAlbum(meta, r.photos, 'https://drive.google.com/drive/folders/' + r.folderId);
-      ui.done('✓ Đã tạo “' + meta.rawName + '” (' + r.photos.length + ' ảnh)');
+      const token = await driveTokenOrPrompt();
+      if (!driveEmail) { driveEmail = (await fetchDriveEmail(token)) || 'Đã liên kết'; try { localStorage.setItem(DRIVE_EMAIL_KEY, driveEmail); } catch (_) {} renderDriveStatus(); }
+      const folderId = await driveCreateFolder(meta.rawName, token);
+      await driveShareAnyone(folderId, token);
+      album.sourceUrl = 'https://drive.google.com/drive/folders/' + folderId;
+      album.lastActivity = Date.now(); saveAlbums(album);
+      await uploadFilesToFolder(files, folderId, token, ui, photo => {
+        album.photos.push(photo);
+        album.lastActivity = Date.now();   // giữ bản local mới hơn server khi tự đồng bộ
+        saveAlbumsLocal();
+        scheduleLiveRefresh(album.id);     // ảnh mới hiện dần (đã gom nhịp, không nháy)
+      });
+      if (_liveTimer) { clearTimeout(_liveTimer); _liveTimer = null; }
+      album.uploading = false; delete album.uploadTotal;
+      album.lastActivity = Date.now(); saveAlbums(album);
+      if ($('#page-albums').classList.contains('active')) renderAlbums();
+      if (detailAlbum && detailAlbum.id === album.id) renderDetail();
+      if (!album.photos.length) { ui.fail('✕ Lỗi: ' + meta.rawName); toast('Không upload được ảnh nào'); }
+      else ui.done('✓ Đã tạo “' + meta.rawName + '” (' + album.photos.length + ' ảnh)');
     } catch (err) {
+      if (_liveTimer) { clearTimeout(_liveTimer); _liveTimer = null; }
+      album.uploading = false; delete album.uploadTotal; album.lastActivity = Date.now(); saveAlbumsLocal();
       ui.fail('✕ Lỗi: ' + meta.rawName);
       toast('Upload lỗi: ' + (err.message || err));
     }
@@ -812,7 +845,7 @@
     const card = document.createElement('div');
     card.className = 'acard';
     card.innerHTML = `
-      <div class="acard-cover">${cover ? `<img src="${escapeAttr(cover)}" alt="" loading="lazy" style="object-position:${escapeAttr(al.coverPos || '50% 50%')}">` : '<span class="ph">🖼️</span>'}</div>
+      <div class="acard-cover">${cover ? `<img src="${escapeAttr(cover)}" alt="" loading="lazy" style="object-position:${escapeAttr(al.coverPos || '50% 50%')}">` : '<span class="ph">🖼️</span>'}${al.uploading ? `<span class="uploading-badge"><span class="spin"></span>Đang tải ${al.photos.length}/${al.uploadTotal || 0}</span>` : ''}</div>
       <div class="acard-body">
         <div class="acard-top">
           <div class="status">
@@ -1027,7 +1060,7 @@
       else { list = s.photos || []; title = `${(s.name || 'ALBUM').toUpperCase()} (${list.length})`; }
     }
     detailList = list.slice().sort((a, b) => (detailSort === 'az' ? 1 : -1) * String(a.name).localeCompare(String(b.name), undefined, { numeric: true }));
-    $('#ad-set-title').textContent = title;
+    $('#ad-set-title').textContent = title + (al.uploading && detailSet === 'goc' ? ` · đang tải lên ${al.photos.length}/${al.uploadTotal || 0}…` : '');
     $('#ad-pick').style.display = detailSet === 'chon' ? 'none' : '';
     $('#ad-pickbar').hidden = !(detailPick && detailSet !== 'chon');
     $('#ad-sort').textContent = detailSort === 'az' ? 'A→Z' : 'Z→A';
@@ -2023,10 +2056,18 @@
   $$('#prog-view button').forEach(b => b.addEventListener('click', () => { progView = b.dataset.v; $$('#prog-view button').forEach(x => x.classList.toggle('active', x === b)); renderProgress(); }));
 
   /* ---------- Tự cập nhật (thiết bị khác thêm/sửa album) ---------- */
+  // Chữ ký các trường HIỂN THỊ -> nếu không đổi thì khỏi vẽ lại (tránh "nháy" ảnh khi tự đồng bộ)
+  function albumsSig() {
+    return (albums || []).map(a => [a.id, a.status, (a.photos || []).length, selCount(a), a.trashed ? 1 : 0, a.cover || '', a.uploading ? 1 : 0].join(':')).join('|');
+  }
+  let _lastSig = '';
   function autoRefresh() {
     if ($('#app').hidden || !apiAuth) return;
     refreshAlbumsFromServer().then(ok => {
       if (!ok) return;
+      const sig = albumsSig();
+      if (sig === _lastSig) return;   // dữ liệu không đổi -> không vẽ lại
+      _lastSig = sig;
       if ($('#page-albums').classList.contains('active')) renderAlbums();
       else if ($('#page-progress').classList.contains('active')) renderProgress();
       else if ($('#page-trash').classList.contains('active')) renderTrash();
