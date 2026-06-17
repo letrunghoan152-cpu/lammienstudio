@@ -545,9 +545,9 @@ img.logo { object-fit: contain; background: #efece5; padding: 2px; }
 .pmenu button.on { color: var(--amber); }
 .pmenu button svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; flex: none; }
 
-/* Masonry — sát hơn, nhiều ảnh hơn */
-.photo-grid.masonry { column-count: 4; column-gap: 6px; }
-.photo-grid.masonry .pcard { display: inline-block; width: 100%; margin: 0 0 6px; break-inside: avoid; }
+/* Lưới ảnh — xếp theo HÀNG: trái→phải, hết hàng trên rồi mới xuống (row order) */
+.photo-grid.masonry { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; grid-auto-flow: row; align-items: start; }
+.photo-grid.masonry .pcard { width: 100%; margin: 0; }
 /* Danh sách */
 .photo-grid.list { display: flex; flex-direction: column; gap: 6px; }
 .photo-grid.list .pcard { display: flex; align-items: center; gap: 10px; padding: 7px 9px; border-radius: 10px; background: var(--panel-2); }
@@ -640,10 +640,9 @@ img.logo { object-fit: contain; background: #efece5; padding: 2px; }
 .sb-overlay { position: fixed; inset: 0; z-index: 45; background: rgba(0,0,0,.55); backdrop-filter: blur(2px); animation: fadeIn .2s ease; }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 @media (min-width: 861px) { .sb-overlay { display: none !important; } }
-@media (max-width: 1100px) { .photo-grid.masonry { column-count: 3; } .photo-grid.grid { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 1100px) { .photo-grid.masonry { grid-template-columns: repeat(3, 1fr); } .photo-grid.grid { grid-template-columns: repeat(3, 1fr); } }
 @media (max-width: 760px) {
-  .photo-grid.masonry { column-count: 2; column-gap: 6px; }
-  .photo-grid.masonry .pcard { margin-bottom: 6px; }
+  .photo-grid.masonry { grid-template-columns: repeat(2, 1fr); gap: 6px; }
   .photo-grid.grid { grid-template-columns: repeat(2, 1fr); gap: 6px; }
   .client-top { padding: 10px 14px; }
   .client-wrap { padding: 14px 10px 70px; }
@@ -783,3 +782,11 @@ img.logo { object-fit: contain; background: #efece5; padding: 2px; }
   padding: 4px 9px; border-radius: 99px; background: rgba(0,0,0,.62); color: #fff; font-size: 11.5px; font-weight: 600; z-index: 3; }
 .uploading-badge .spin { width: 11px; height: 11px; border-radius: 50%; border: 2px solid rgba(255,255,255,.4); border-top-color: #fff; animation: uf-spin .7s linear infinite; }
 @keyframes uf-spin { to { transform: rotate(360deg); } }
+
+/* ============== Nút tải 1 ảnh trong album (studio) ============== */
+.dthumb .dl-one { position: absolute; top: 8px; right: 8px; width: 30px; height: 30px; border: 0; border-radius: 8px;
+  background: rgba(0,0,0,.55); color: #fff; display: grid; place-items: center; cursor: pointer; opacity: 0; transition: opacity .15s, background .15s; z-index: 3; }
+.dthumb:hover .dl-one { opacity: 1; }
+.dthumb .dl-one:hover { background: var(--brand); }
+.dthumb .dl-one svg { width: 15px; height: 15px; }
+@media (max-width: 760px) { .dthumb .dl-one { opacity: .92; } }

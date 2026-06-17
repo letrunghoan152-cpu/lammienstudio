@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <script>try{document.documentElement.setAttribute('data-theme',localStorage.getItem('lamMienTheme')||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}</script>
-  <link rel="stylesheet" href="styles.css?v=20260617e">
+  <link rel="stylesheet" href="styles.css?v=20260617f">
   <link rel="icon" href="logo.svg">
 </head>
 <body>
@@ -54,6 +54,30 @@
     <div style="text-align:center">
       <div class="spinner"></div>
       <p style="margin-top:16px;color:var(--muted);font-size:14px">Đang tải album…</p>
+    </div>
+  </div>
+
+  <!-- ============== CLIENT GATE (khoá bằng SĐT) ============== -->
+  <div class="screen" id="client-gate" hidden>
+    <div class="login-card" style="text-align:center">
+      <img class="logo" src="logo.svg" alt="" style="width:50px;height:50px;border-radius:12px;margin:0 auto 12px">
+      <h1>Album được bảo vệ</h1>
+      <p class="sub">Nhập số điện thoại của bạn để mở album.</p>
+      <input id="gate-input" inputmode="tel" autocomplete="tel" placeholder="Số điện thoại" style="text-align:center;margin-top:14px">
+      <p id="gate-error" class="login-note" style="color:#fb7185;display:none">Bạn đã nhập sai mã khoá. Hãy liên hệ Lam Miên Studio để được hỗ trợ.</p>
+      <button class="btn primary block" id="gate-submit" style="margin-top:14px">Xem album</button>
+    </div>
+  </div>
+
+  <!-- ============== WELCOME MODAL ============== -->
+  <div class="modal" id="welcome-modal">
+    <div class="modal-card" style="max-width:430px;text-align:center">
+      <div style="font-size:42px;margin:8px 0 2px">🎉</div>
+      <h3 id="welcome-title" style="margin:0 0 6px">Chào mừng</h3>
+      <p id="welcome-text" style="line-height:1.65;color:var(--muted);margin:0 18px 6px"></p>
+      <div class="modal-foot" style="justify-content:center;border-top:0">
+        <button class="btn primary" id="welcome-ok">Bắt đầu chọn ảnh</button>
+      </div>
     </div>
   </div>
 
@@ -402,6 +426,11 @@
             <label class="switch"><input id="allow-notes" type="checkbox" checked><span class="track"></span><span>Cho phép khách ghi chú</span></label>
             <label class="switch"><input id="allow-download" type="checkbox"><span class="track"></span><span>Cho phép tải ảnh</span></label>
           </div>
+          <div class="field">
+            <label class="switch"><input id="lock-on" type="checkbox"><span class="track"></span><span>Khoá link bằng SĐT khách</span></label>
+            <input id="lock-phone" inputmode="tel" placeholder="SĐT khách dùng làm mã mở khoá" style="margin-top:8px" hidden>
+            <span class="hint" id="lock-hint" hidden>Khách phải nhập đúng SĐT này mới xem được album.</span>
+          </div>
         </div>
         <div class="modal-foot">
           <button class="btn ghost" type="button" id="create-cancel">Huỷ</button>
@@ -532,6 +561,6 @@
   <div class="upload-stack" id="upload-stack"></div>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <script src="app.js?v=20260617e"></script>
+  <script src="app.js?v=20260617f"></script>
 </body>
 </html>

@@ -200,7 +200,7 @@
   function setDriveKey(k) { try { k ? localStorage.setItem(DKEY, k) : localStorage.removeItem(DKEY); } catch (_) {} }
 
   /* ---------- Auth ---------- */
-  function hideAllScreens() { $('#login-view').hidden = true; $('#app').hidden = true; $('#client').hidden = true; const ce = $('#client-error'); if (ce) ce.hidden = true; const cl = $('#client-loading'); if (cl) cl.hidden = true; }
+  function hideAllScreens() { $('#login-view').hidden = true; $('#app').hidden = true; $('#client').hidden = true; const ce = $('#client-error'); if (ce) ce.hidden = true; const cl = $('#client-loading'); if (cl) cl.hidden = true; const cg = $('#client-gate'); if (cg) cg.hidden = true; }
   function showClientLoading() { hideAllScreens(); $('#client-loading').hidden = false; }
   function showLogin() { hideAllScreens(); $('#login-view').hidden = false; }
   function showClientError(msg) {
@@ -667,6 +667,7 @@
   function openCreate() {
     $('#create-form').reset();
     $('#allow-notes').checked = true; $('#allow-download').checked = false;
+    $('#lock-phone').hidden = true; $('#lock-hint').hidden = true;
     pickedUploadFiles = []; renderPickInfo();
     setSource('upload'); renderDriveStatus();
     $('#create-modal').classList.add('open');
@@ -677,6 +678,8 @@
   $('#create-close').addEventListener('click', closeCreate);
   $('#create-cancel').addEventListener('click', closeCreate);
   $('#create-modal').addEventListener('click', e => { if (e.target.id === 'create-modal') closeCreate(); });
+  $('#welcome-ok') && $('#welcome-ok').addEventListener('click', () => $('#welcome-modal').classList.remove('open'));
+  $('#welcome-modal') && $('#welcome-modal').addEventListener('click', e => { if (e.target.id === 'welcome-modal') $('#welcome-modal').classList.remove('open'); });
 
   // chuyển nguồn ảnh
   $$('#src-seg button').forEach(b => b.addEventListener('click', () => setSource(b.dataset.src)));
@@ -694,6 +697,11 @@
     ['dragleave', 'drop'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.remove('drag'); }));
     dz.addEventListener('drop', e => { if (e.dataTransfer && e.dataTransfer.files) addFiles(e.dataTransfer.files); });
   }
+  // Công tắc khoá link bằng SĐT
+  $('#lock-on') && $('#lock-on').addEventListener('change', e => {
+    $('#lock-phone').hidden = !e.target.checked; $('#lock-hint').hidden = !e.target.checked;
+    if (e.target.checked) $('#lock-phone').focus();
+  });
 
   // Tạo bản ghi album từ metadata + ảnh đã có
   function finalizeAlbum(meta, photos, sourceUrl, extra) {
@@ -711,6 +719,7 @@
       deadlineDays: meta.deadlineDays,
       deadline: '',        // sẽ tự tính khi khách bấm "Gửi hậu kỳ"
       selectedAt: 0,
+      lockPhone: meta.lockPhone || '',
       sourceUrl,
       cover: '',
       editedPhotos: [],
@@ -778,7 +787,8 @@
       deadlineDays: Number.isFinite(days) && days >= 0 ? days : 0,
       maxCount: Number.isFinite(max) && max > 0 ? max : 0,
       allowNotes: $('#allow-notes').checked,
-      allowDownload: $('#allow-download').checked
+      allowDownload: $('#allow-download').checked,
+      lockPhone: ($('#lock-on').checked ? ($('#lock-phone').value || '').replace(/\D/g, '') : '')
     };
 
     if (createSource === 'drive') {
@@ -1096,10 +1106,18 @@
     const picked = detailPick && detailPicked.has(photoKey(p));
     const d = document.createElement('div');
     d.className = 'dthumb' + (p.selected ? ' sel' : '') + (detailPick ? ' pickable' : '') + (picked ? ' picked' : '');
-    d.innerHTML = `<img src="${escapeAttr(p.src)}" alt="" loading="lazy" decoding="async"><span class="dtag">${escapeHtml(ext)}</span>${p.selected ? '<span class="dheart">♥</span>' : ''}${detailPick ? '<span class="pickbox"></span>' : ''}`;
+    d.innerHTML = `<img src="${escapeAttr(p.src)}" alt="" loading="lazy" decoding="async"><span class="dtag">${escapeHtml(ext)}</span>${p.selected ? '<span class="dheart">♥</span>' : ''}${detailPick ? '<span class="pickbox"></span>' : `<button class="dl-one" title="Tải ảnh này"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg></button>`}`;
     attachImgFallback(d.querySelector('img'), p);
+    const dl = d.querySelector('.dl-one'); if (dl) dl.addEventListener('click', e => { e.stopPropagation(); downloadOnePhoto(p); });
     d.addEventListener('click', () => { if (detailPick) togglePickOne(p, d); else openLightbox(detailList, idx, 'view'); });
     return d;
+  }
+  function downloadOnePhoto(p) {
+    const url = driveDownloadUrl(p);
+    const a = document.createElement('a');
+    a.href = url; a.target = '_blank'; a.rel = 'noopener'; a.download = p.name || '';
+    document.body.appendChild(a); a.click(); a.remove();
+    toast('Đang tải ảnh…');
   }
   function buildDetailRow(p, idx) {
     const ext = (String(p.name).split('.').pop() || 'IMG').toUpperCase().slice(0, 4);
@@ -1437,7 +1455,7 @@
     });
     let ci = 0;
     if (al.cover) { const idx = al.photos.findIndex(x => (x.full || x.src) === al.cover); if (idx >= 0) ci = idx; }
-    const payload = { aid: al.id, n: al.name, m: al.maxCount, an: al.allowNotes ? 1 : 0, dl: al.allowDownload ? 1 : 0, b: brand.name, w: brand.welcome, ci, p };
+    const payload = { aid: al.id, n: al.name, m: al.maxCount, an: al.allowNotes ? 1 : 0, dl: al.allowDownload ? 1 : 0, lk: al.lockPhone || '', b: brand.name, w: brand.welcome, ci, p };
     return b64encode(JSON.stringify(payload));
   }
   function albumLink(al) {
@@ -1503,13 +1521,43 @@
     });
     const cidx = payload.ci || 0;
     const cover = photos[cidx] ? (photos[cidx].full || photos[cidx].src) : (payload.c || '');
-    let al = { id, name: payload.n || 'Album', maxCount: payload.m || 0, allowNotes: !!payload.an, allowDownload: !!payload.dl, brandName: payload.b || 'Lam Miên Studio', welcome: payload.w || '', cover, photos };
+    let al = { id, name: payload.n || 'Album', maxCount: payload.m || 0, allowNotes: !!payload.an, allowDownload: !!payload.dl, lockPhone: payload.lk || '', brandName: payload.b || 'Lam Miên Studio', welcome: payload.w || '', cover, photos };
     try { const saved = localStorage.getItem('lamMienGuest_' + id); if (saved) { const s = JSON.parse(saved); if (s && s.photos && s.photos.length) al = s; } } catch (_) {}
     return { album: al, bound: false };
   }
 
   /* ---------- Client picker ---------- */
+  // Cổng khoá bằng SĐT (chỉ với link chia sẻ cho khách, không áp dụng khi studio xem trước)
+  function gateKey(id) { return 'lamMienGate_unlocked_' + id; }
   function openClient(al, bound, remote) {
+    const needGate = remote && !bound && al.lockPhone;
+    let unlocked = false;
+    try { unlocked = localStorage.getItem(gateKey(al.id)) === '1'; } catch (_) {}
+    if (needGate && !unlocked) { showClientGate(al); return; }
+    openClientInner(al, bound, remote);
+  }
+  function showClientGate(al) {
+    hideAllScreens(); $('#client-gate').hidden = false;
+    const inp = $('#gate-input'), err = $('#gate-error'), btn = $('#gate-submit');
+    inp.value = ''; err.style.display = 'none'; setTimeout(() => inp.focus(), 100);
+    const submit = () => {
+      const got = (inp.value || '').replace(/\D/g, '');
+      if (got && got === String(al.lockPhone).replace(/\D/g, '')) {
+        try { localStorage.setItem(gateKey(al.id), '1'); } catch (_) {}
+        openClientInner(al, false, true);
+        const m = parseAlbumMeta(al.name);
+        const who = (m.client || '').trim() || 'bạn';
+        $('#welcome-title').textContent = 'Chào mừng ' + who + '!';
+        $('#welcome-text').textContent = `Chào mừng ${who} đến với ${al.brandName || brand.name}. Mời bạn chọn ảnh theo hướng dẫn hệ thống.`;
+        $('#welcome-modal').classList.add('open');
+      } else {
+        err.style.display = 'block'; inp.value = ''; inp.focus();
+      }
+    };
+    btn.onclick = submit;
+    inp.onkeydown = e => { if (e.key === 'Enter') submit(); };
+  }
+  function openClientInner(al, bound, remote) {
     clientAlbum = al; clientBound = !!bound; clientRemote = !!remote; clientFilter = 'all';
     hideAllScreens(); $('#client').hidden = false;
     const brandName = al.brandName || brand.name;
@@ -1740,7 +1788,7 @@
   function setReview(id, state) {
     const p = clientAlbum.photos.find(x => x.id === id); if (!p) return;
     if (state === 'selected' && p.review !== 'selected' && clientAlbum.maxCount && cSel().length >= clientAlbum.maxCount) {
-      toast(`Chỉ được chọn tối đa ${clientAlbum.maxCount} ảnh`); return;
+      toast(`Bạn đã đạt giới hạn chọn ảnh của gói (${clientAlbum.maxCount}). Vui lòng bỏ chọn bớt hoặc liên hệ Studio để mua thêm ảnh chỉnh sửa.`); return;
     }
     p.review = (p.review === state) ? '' : state;
     p.selected = (p.review === 'selected');
