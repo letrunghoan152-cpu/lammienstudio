@@ -68,11 +68,22 @@
         const localById = {}; albums.forEach(a => { if (a.id) localById[a.id] = a; });
         const merged = list.map(sv => {
           const lo = localById[sv.id];
-          if (lo && (lo.uploading || (lo.lastActivity || 0) > (sv.lastActivity || 0))) { apiPushAlbum(lo); return lo; }
+          // CHỈ giữ bản local khi chính máy này đang upload album đó (KHÔNG dựa vào cờ uploading cũ -
+          // cờ kẹt sẽ tự đẩy ngược lên server làm album "đang tải" mãi).
+          if (lo && activeUploads.has(sv.id)) { apiPushAlbum(lo); return lo; }
+          // Hoặc local mới hơn server thật sự (vd vừa đổi bìa/đổi tên) chưa kịp đồng bộ.
+          if (lo && (lo.lastActivity || 0) > (sv.lastActivity || 0)) { apiPushAlbum(lo); return lo; }
           return sv;
         });
         albums = merged.concat(recent);
       }
+      // Tự dọn cờ "đang tải" bị kẹt: album không còn hoạt động >90s và máy này không đang upload nó.
+      // Đẩy bản đã sạch cờ lên server -> mọi thiết bị tự thoát trạng thái "đang tải" vĩnh viễn.
+      albums.forEach(a => {
+        if (a.uploading && !activeUploads.has(a.id) && Date.now() - (a.lastActivity || 0) > 90000) {
+          a.uploading = false; delete a.uploadTotal; apiPushAlbum(a);
+        }
+      });
       albums.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
       try { localStorage.setItem(MIGRATED_KEY, '1'); } catch (_) {}
       saveAlbumsLocal();
@@ -93,6 +104,7 @@
 
   /* ---------- State ---------- */
   let albums = [];
+  const activeUploads = new Set(); // id album CHÍNH máy này đang upload (chống cờ "đang tải" kẹt khi đồng bộ)
   let brand = { name: 'Lam Miên Studio', welcome: 'Chọn những khoảnh khắc bạn yêu thích' };
   let currentFilter = 'all';
   let starredOnly = false;
@@ -287,15 +299,24 @@
     const m = String(u).match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || String(u).match(/[?&]id=([a-zA-Z0-9_-]+)/) || String(u).match(/\/d\/([a-zA-Z0-9_-]+)/);
     return m ? m[1] : '';
   }
+  // Nguồn ảnh CHÍNH: lh3.googleusercontent.com — CDN của Google, ổn định, ít bị bóp 429 hơn hẳn drive.google.com/thumbnail
+  const lh3 = (id, sz) => `https://lh3.googleusercontent.com/d/${id}=${sz || 'w400'}`;
+  // Nguồn DỰ PHÒNG: drive.google.com/thumbnail (hay bị throttle nên chỉ dùng khi lh3 lỗi)
   const driveThumb = (id, sz) => `https://drive.google.com/thumbnail?id=${id}&sz=${sz || 'w400'}`;
   function driveIdFromThumb(u) { const m = String(u).match(/[?&]id=([a-zA-Z0-9_-]+)/) || String(u).match(/\/d\/([a-zA-Z0-9_-]+)/); return m ? m[1] : ''; }
-  // Khi thumbnail Drive lỗi/bị giới hạn -> thử nguồn lh3 (cũng từ Drive), rồi mới chịu thua
+  function reqSize(u) { const m = String(u).match(/(?:sz=|=)(w\d+)\b/); return (m && m[1]) || 'w400'; }
+  // URL hiển thị 1 ảnh: ưu tiên dựng lh3 từ Drive ID (kể cả album CŨ đang lưu link thumbnail -> tự nâng cấp khi render)
+  function photoSrc(p, sz) { const id = p.driveId || driveIdFromThumb(p.src || p.full || ''); return id ? lh3(id, sz || 'w400') : (p.src || p.full || ''); }
+  // Chuyển 1 URL ảnh đã lưu (vd ảnh bìa) sang lh3 nếu rút được Drive ID
+  function urlSrc(u, sz) { const id = driveIdFromThumb(u || ''); return id ? lh3(id, sz || 'w600') : (u || ''); }
+  // lh3 lỗi -> thử thumbnail Drive cùng cỡ -> thử lh3 lần nữa (qua cơn rate-limit) rồi mới chịu thua
   function attachImgFallback(img, p) {
     if (!img) return; let tried = 0;
     img.addEventListener('error', () => {
-      const id = p.driveId || driveIdFromThumb(p.src); if (!id) return;
-      if (tried === 0) { tried = 1; img.src = `https://lh3.googleusercontent.com/d/${id}=w600`; }
-      else if (tried === 1) { tried = 2; img.src = driveThumb(id, 'w400'); } // thử lại 1 lần nữa (qua cơn rate-limit)
+      const id = p.driveId || driveIdFromThumb(p.src || p.full || ''); if (!id) return;
+      const sz = reqSize(img.src);
+      if (tried === 0) { tried = 1; img.src = driveThumb(id, sz); }
+      else if (tried === 1) { tried = 2; img.src = lh3(id, sz); }
     });
   }
   async function listDriveFolder(folderId, apiKey) {
@@ -326,7 +347,7 @@
     if (!files.length) throw new Error('Thư mục trống hoặc chưa chia sẻ “Bất kỳ ai có đường liên kết”.');
     return files.map((f, i) => {
       const md = f.imageMediaMetadata || {};
-      return { id: 'd' + i, name: f.name, driveId: f.id, w: md.width || 0, h: md.height || 0, src: driveThumb(f.id, 'w400'), full: driveThumb(f.id, 'w1600'), selected: false, note: '' };
+      return { id: 'd' + i, name: f.name, driveId: f.id, w: md.width || 0, h: md.height || 0, src: lh3(f.id, 'w400'), full: lh3(f.id, 'w1600'), selected: false, note: '' };
     });
   }
   const DEMO = ['photo-1519741497674-611481863552','photo-1520854221256-17451cc331bf','photo-1511285560929-80b456fea0bc','photo-1519225421980-715cb0215aed','photo-1465495976277-4387d4b0b4c6','photo-1525258946800-98cfd641d0de','photo-1606216794074-735e91aa2c92','photo-1583939003579-730e3918a45a','photo-1591604466107-ec97de577aff','photo-1537633552985-df8429e8048b']
@@ -578,7 +599,7 @@
         try {
           const id = await driveUploadFile(file, folderId, token, d => { uploaded += d; });
           await driveShareAnyone(id, token);
-          const photo = { id: 'a' + id, name: file.name, driveId: id, w: dim.w, h: dim.h, src: driveThumb(id, 'w400'), full: driveThumb(id, 'w1600'), selected: false, note: '' };
+          const photo = { id: 'a' + id, name: file.name, driveId: id, w: dim.w, h: dim.h, src: lh3(id, 'w400'), full: lh3(id, 'w1600'), selected: false, note: '' };
           results[i] = photo;
           if (onPhoto) { try { onPhoto(photo, i); } catch (_) {} }
         } catch (_) { results[i] = null; }
@@ -750,6 +771,7 @@
   async function runUploadJob(meta, files) {
     const ui = createUploadItem(meta.rawName, files.length);
     const album = finalizeAlbum(meta, [], '', { uploading: true, uploadTotal: files.length });
+    activeUploads.add(album.id); // máy này là máy upload -> được bảo vệ khỏi bị server ghi đè
     try {
       const token = await driveTokenOrPrompt();
       if (!driveEmail) { driveEmail = (await fetchDriveEmail(token)) || 'Đã liên kết'; try { localStorage.setItem(DRIVE_EMAIL_KEY, driveEmail); } catch (_) {} renderDriveStatus(); }
@@ -761,6 +783,8 @@
         album.photos.push(photo);
         album.lastActivity = Date.now();   // giữ bản local mới hơn server khi tự đồng bộ
         saveAlbumsLocal();
+        // Đẩy lên server theo đợt -> nếu tab chết giữa chừng vẫn không mất danh sách ảnh
+        if (album.photos.length % 15 === 0) apiPushAlbum(album);
         scheduleLiveRefresh(album.id);     // ảnh mới hiện dần (đã gom nhịp, không nháy)
       });
       if (_liveTimer) { clearTimeout(_liveTimer); _liveTimer = null; }
@@ -772,9 +796,12 @@
       else ui.done('✓ Đã tạo “' + meta.rawName + '” (' + album.photos.length + ' ảnh)');
     } catch (err) {
       if (_liveTimer) { clearTimeout(_liveTimer); _liveTimer = null; }
-      album.uploading = false; delete album.uploadTotal; album.lastActivity = Date.now(); saveAlbumsLocal();
+      album.uploading = false; delete album.uploadTotal; album.lastActivity = Date.now();
+      saveAlbums(album); // đẩy bản đã tắt cờ + số ảnh đã tải được lên server (không để kẹt "đang tải")
       ui.fail('✕ Lỗi: ' + meta.rawName);
       toast('Upload lỗi: ' + (err.message || err));
+    } finally {
+      activeUploads.delete(album.id);
     }
   }
 
@@ -867,7 +894,7 @@
     const card = document.createElement('div');
     card.className = 'acard';
     card.innerHTML = `
-      <div class="acard-cover">${cover ? `<img src="${escapeAttr(cover)}" alt="" loading="lazy" style="object-position:${escapeAttr(al.coverPos || '50% 50%')}">` : '<span class="ph">🖼️</span>'}${al.uploading ? `<span class="uploading-badge"><span class="spin"></span>Đang tải ${al.photos.length}/${al.uploadTotal || 0}</span>` : ''}<button class="acard-star${al.starred ? ' on' : ''}" data-act="star" title="Gắn dấu sao"><svg viewBox="0 0 24 24"><path d="M12 2l3 6.5 7 .9-5 4.8 1.3 7L12 18l-6.6 3.2L6.7 14l-5-4.8 7-.9z"/></svg></button></div>
+      <div class="acard-cover">${cover ? `<img src="${escapeAttr(urlSrc(cover, 'w600'))}" alt="" loading="lazy" style="object-position:${escapeAttr(al.coverPos || '50% 50%')}">` : '<span class="ph">🖼️</span>'}${al.uploading ? `<span class="uploading-badge"><span class="spin"></span>Đang tải ${al.photos.length}/${al.uploadTotal || 0}</span>` : ''}<button class="acard-star${al.starred ? ' on' : ''}" data-act="star" title="Gắn dấu sao"><svg viewBox="0 0 24 24"><path d="M12 2l3 6.5 7 .9-5 4.8 1.3 7L12 18l-6.6 3.2L6.7 14l-5-4.8 7-.9z"/></svg></button></div>
       <div class="acard-body">
         <div class="acard-top">
           <div class="status">
@@ -1088,7 +1115,7 @@
         `<button class="set-dl" title="Tải .zip">${ICN_DL}</button>` +
         (r.fixed ? '' : `<button class="set-edit" title="Đổi tên album">${ICN_EDIT}</button><button class="set-del" title="Xoá album">${ICN_XX}</button>`);
       div.addEventListener('click', () => { if (detailPick) { detailPick = false; detailPicked.clear(); $('#ad-pickbar').hidden = true; $('#ad-pick').classList.remove('active'); $('#ad-pick').textContent = 'Chọn'; } detailSet = r.key; renderDetail(); });
-      div.querySelector('.set-dl').addEventListener('click', e => { e.stopPropagation(); zipDownloadSet(setList(r.key), zipName(r.key), e.currentTarget); });
+      div.querySelector('.set-dl').addEventListener('click', e => { e.stopPropagation(); zipDownloadSet(setList(r.key), zipName(r.key), e.currentTarget, 'goc'); });
       if (!r.fixed) {
         div.querySelector('.set-edit').addEventListener('click', e => { e.stopPropagation(); renameSet(r.key); });
         div.querySelector('.set-del').addEventListener('click', e => { e.stopPropagation(); deleteSet(r.key); });
@@ -1157,7 +1184,7 @@
     const picked = detailPick && detailPicked.has(photoKey(p));
     const d = document.createElement('div');
     d.className = 'dthumb' + (p.selected ? ' sel' : '') + (detailPick ? ' pickable' : '') + (picked ? ' picked' : '');
-    d.innerHTML = `<img src="${escapeAttr(p.src)}" alt="" loading="lazy" decoding="async"><span class="dtag">${escapeHtml(ext)}</span>${p.selected ? '<span class="dheart">♥</span>' : ''}${detailPick ? '<span class="pickbox"></span>' : `<button class="dl-one" title="Tải ảnh này"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg></button>`}`;
+    d.innerHTML = `<img src="${escapeAttr(photoSrc(p, 'w400'))}" alt="" loading="lazy" decoding="async"><span class="dtag">${escapeHtml(ext)}</span>${p.selected ? '<span class="dheart">♥</span>' : ''}${detailPick ? '<span class="pickbox"></span>' : `<button class="dl-one" title="Tải ảnh này"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg></button>`}`;
     attachImgFallback(d.querySelector('img'), p);
     const dl = d.querySelector('.dl-one'); if (dl) dl.addEventListener('click', e => { e.stopPropagation(); downloadOnePhoto(p); });
     d.addEventListener('click', () => { if (detailPick) togglePickOne(p, d); else openLightbox(detailList, idx, 'view'); });
@@ -1344,34 +1371,62 @@
     if (used.has(n)) { const dot = n.lastIndexOf('.'); n = n.slice(0, dot) + '_' + (i + 1) + n.slice(dot); }
     used.add(n); return n;
   }
-  async function zipDownloadSet(list, fname, btn) {
+  // URL tải 1 ảnh để nén zip. quality 'goc' = file gốc (alt=media), 'nen' = bản w1600 nhẹ (lh3)
+  function zipImgUrl(p, quality) {
+    const id = p.driveId || driveIdFromThumb(p.src || p.full);
+    if (quality === 'goc' && id) return `https://www.googleapis.com/drive/v3/files/${id}?alt=media&key=${FIXED_DRIVE_KEY}&supportsAllDrives=true`;
+    if (id) return lh3(id, 'w1600');
+    return p.full || p.src;
+  }
+  async function fetchBlobRetry(p, quality) {
+    const id = p.driveId || driveIdFromThumb(p.src || p.full);
+    const tries = quality === 'goc'
+      ? [zipImgUrl(p, 'goc')]
+      : [lh3(id || '', 'w1600'), id ? driveThumb(id, 'w1600') : (p.full || p.src)];
+    for (const u of tries) {
+      if (!u) continue;
+      try { const r = await fetch(u); if (r.ok) return await r.blob(); } catch (_) {}
+    }
+    throw new Error('fail');
+  }
+  // quality mặc định 'nen' (an toàn RAM, đặc biệt iOS); studio có thể yêu cầu 'goc'
+  async function zipDownloadSet(list, fname, btn, quality) {
+    quality = quality || 'nen';
     if (!list || !list.length) { toast('Folder này chưa có ảnh để tải'); return; }
     if (typeof JSZip === 'undefined') { toast('Chưa tải được thư viện nén, kiểm tra mạng rồi thử lại'); return; }
-    if (list.length > 150 && !window.confirm(`Tải & nén ${list.length} ảnh gốc có thể nặng và lâu. Tiếp tục?`)) return;
+    if (quality === 'goc' && list.length > 150 && !window.confirm(`Tải & nén ${list.length} ảnh GỐC (dung lượng rất lớn) có thể làm treo trình duyệt. Tiếp tục?`)) return;
     const icon = btn ? btn.innerHTML : '';
     if (btn) { btn.disabled = true; btn.style.width = 'auto'; btn.style.padding = '0 8px'; }
     const setBtn = t => { if (btn) btn.textContent = t; };
-    const zip = new JSZip(); const used = new Set(); let ok = 0, fail = 0;
-    for (let i = 0; i < list.length; i++) {
-      const p = list[i]; setBtn(`${i + 1}/${list.length}`);
-      const id = p.driveId || driveIdFromThumb(p.src);
-      try {
-        const url = id
-          ? `https://www.googleapis.com/drive/v3/files/${id}?alt=media&key=${FIXED_DRIVE_KEY}&supportsAllDrives=true`
-          : (p.full || p.src);
-        const res = await fetch(url);
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        zip.file(safeFileName(p.name, i, used), await res.blob());
-        ok++;
-      } catch (_) { fail++; }
+    const zip = new JSZip(); const used = new Set();
+    const names = list.map((p, i) => safeFileName(p.name, i, used));
+    let done = 0, idx = 0; let failed = [];
+    setBtn('0%');
+    const worker = async () => {
+      while (idx < list.length) {
+        const i = idx++;
+        try { zip.file(names[i], await fetchBlobRetry(list[i], quality)); }
+        catch (_) { failed.push(i); }
+        done++; setBtn(Math.round(done / list.length * 100) + '%');
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(4, list.length) }, worker)); // 4 luồng song song
+    if (failed.length) { // thử lại 1 lượt các ảnh lỗi (qua cơn rate-limit của Google)
+      setBtn('Thử lại…'); const still = [];
+      for (const i of failed) { try { zip.file(names[i], await fetchBlobRetry(list[i], quality)); } catch (_) { still.push(i); } }
+      failed = still;
     }
-    if (!ok) { toast('Không tải được ảnh — kiểm tra thư mục Drive đã chia sẻ công khai chưa'); if (btn) { btn.disabled = false; btn.innerHTML = icon; btn.style.width = ''; btn.style.padding = ''; } return; }
+    const okCount = list.length - failed.length;
+    const restore = () => { if (btn) { btn.disabled = false; btn.innerHTML = icon; btn.style.width = ''; btn.style.padding = ''; } };
+    if (!okCount) { toast('Không tải được ảnh — kiểm tra thư mục Drive đã chia sẻ “Bất kỳ ai có link” chưa'); restore(); return; }
+    // KHÔNG âm thầm tạo zip thiếu ảnh: báo rõ và để người dùng quyết định
+    if (failed.length && !window.confirm(`Còn ${failed.length}/${list.length} ảnh chưa tải được (mạng chập chờn hoặc Drive bóp tải). Tải ${okCount} ảnh đã có?`)) { restore(); return; }
     setBtn('Nén…');
     const blob = await zip.generateAsync({ type: 'blob' }, m => setBtn(Math.round(m.percent) + '%'));
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = fname + '.zip';
     document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
-    if (btn) { btn.disabled = false; btn.innerHTML = icon; btn.style.width = ''; btn.style.padding = ''; }
-    toast(`Đã tải ${ok} ảnh${fail ? ` (lỗi ${fail})` : ''} → ${fname}.zip`);
+    restore();
+    toast(`Đã tải ${okCount} ảnh${failed.length ? ` (thiếu ${failed.length})` : ''} → ${fname}.zip`);
   }
   $('#ad-preview').addEventListener('click', () => { if (detailAlbum) openClient(detailAlbum, true); });
   $('#ad-share').addEventListener('click', () => { if (detailAlbum) openShare(detailAlbum); });
@@ -1392,6 +1447,7 @@
       });
       const removed = al.photos.length - kept;
       al.photos = fresh;
+      al.uploading = false; delete al.uploadTotal; // kéo lại từ Drive xong -> chắc chắn không còn "đang tải"
       if (al.cover && !fresh.some(p => (p.full || p.src) === al.cover)) al.cover = ''; // bìa cũ đã bị xoá
       al.lastActivity = Date.now();
       saveAlbums(al);
@@ -1451,7 +1507,7 @@
     if (!detailAlbum) return;
     const grid = $('#cover-pick-grid'); grid.innerHTML = '';
     detailAlbum.photos.forEach(p => {
-      const im = document.createElement('img'); im.src = p.src; im.loading = 'lazy';
+      const im = document.createElement('img'); im.src = photoSrc(p, 'w400'); im.loading = 'lazy';
       attachImgFallback(im, p);
       im.addEventListener('click', () => coverPick(p));
       grid.appendChild(im);
@@ -1462,7 +1518,7 @@
     $('#cover-modal').classList.add('open');
   }
   function coverPick(p) {
-    cropUrl = p.full || p.src; cropX = 50; cropY = 50;
+    cropUrl = photoSrc(p, 'w1600'); cropX = 50; cropY = 50;
     const fr = $('#crop-frame'); fr.style.backgroundImage = `url("${cropUrl}")`; fr.style.backgroundPosition = '50% 50%';
     $('#cover-step1').hidden = true; $('#cover-step2').hidden = false;
     $('#cover-back').hidden = false; $('#cover-save').hidden = false;
@@ -1707,11 +1763,11 @@
     card.dataset.id = p.id;
     if (editing) {
       card.innerHTML = `
-        <img src="${escapeAttr(p.src)}" alt="${escapeAttr(p.name)}" loading="lazy" decoding="async">
+        <img src="${escapeAttr(photoSrc(p, 'w400'))}" alt="${escapeAttr(p.name)}" loading="lazy" decoding="async">
         <div class="pbar"><span class="fname" title="${escapeAttr(p.name)}">${escapeHtml(p.name)}</span>${dlAllowed ? `<button class="more-btn" data-a="download" title="Tải ảnh">${ICN.dl}</button>` : ''}</div>`;
     } else {
       card.innerHTML = `
-        <img src="${escapeAttr(p.src)}" alt="${escapeAttr(p.name)}" loading="lazy" decoding="async">
+        <img src="${escapeAttr(photoSrc(p, 'w400'))}" alt="${escapeAttr(p.name)}" loading="lazy" decoding="async">
         <div class="pbar">
           <span class="fname" title="${escapeAttr(p.name)}">${escapeHtml(p.name)}</span>
           <button class="choosebtn${p.review === 'selected' ? ' on' : ''}" data-a="choose">${p.review === 'selected' ? '✓' : 'Chọn'}</button>
@@ -1965,25 +2021,26 @@
   function showLbPhoto(p) {
     const img = $('#lb-img'); const token = ++lbLoadToken;
     img.alt = p.name || '';
-    img.onerror = () => { img.onerror = null; const id = p.driveId || driveIdFromThumb(p.src); if (id) img.src = `https://lh3.googleusercontent.com/d/${id}=w1200`; };
+    const low = photoSrc(p, 'w400'), high = photoSrc(p, 'w1600');
+    img.onerror = () => { img.onerror = null; const id = p.driveId || driveIdFromThumb(p.src || p.full); if (id) img.src = driveThumb(id, 'w1600'); };
     // Hiện thumbnail (đã cache trong lưới) ngay lập tức → không giật
-    img.src = p.src || p.full;
+    img.src = low;
     // Hiệu ứng trượt theo hướng next/prev
     img.classList.remove('lb-slide-l', 'lb-slide-r');
     if (lbDir !== 0) { void img.offsetWidth; img.classList.add(lbDir > 0 ? 'lb-slide-r' : 'lb-slide-l'); }
     lbDir = 0;
     // Rồi âm thầm nâng lên bản nét; chỉ áp dụng nếu vẫn đang xem ảnh này
-    if (p.full && p.full !== p.src) {
+    if (high && high !== low) {
       const hi = new Image();
-      hi.onload = () => { if (token === lbLoadToken) img.src = p.full; };
-      hi.src = p.full;
+      hi.onload = () => { if (token === lbLoadToken) img.src = high; };
+      hi.src = high;
     }
   }
   function preloadAround(i) {
     if (!lbPhotos.length) return;
     [i - 1, i + 1, i + 2].forEach(k => {
       const q = lbPhotos[(k + lbPhotos.length) % lbPhotos.length];
-      if (q) { const im = new Image(); im.src = q.full || q.src; }
+      if (q) { const im = new Image(); im.src = photoSrc(q, 'w1600'); }
     });
   }
   function openLightbox(photos, i, mode) {
