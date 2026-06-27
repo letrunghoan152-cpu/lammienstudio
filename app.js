@@ -9,6 +9,8 @@
   const AUTH_KEY = 'lamMienAuth';
   const DKEY = 'lamMienDriveKey';
   const BRAND_KEY = 'lamMienBrand';
+  // CHỈ dùng cho tải ZIP bản gốc (alt=media) — phải KHOÁ key theo HTTP referrer trên Google Cloud
+  // để dù lộ trong JS cũng không bị lạm dụng. Phần liệt kê ảnh đã chuyển sang /api/drive-list (server-side).
   const FIXED_DRIVE_KEY = 'AIzaSyB30IdJg_FKZpi2oOmF8bS7qMEna5P2dpg';
   const API_AUTH_KEY = 'lamMienApiAuth';
   const MIGRATED_KEY = 'lamMienMigrated';
@@ -319,31 +321,17 @@
       else if (tried === 1) { tried = 2; img.src = lh3(id, sz); }
     });
   }
-  async function listDriveFolder(folderId, apiKey) {
-    let files = [], pageToken = '';
-    do {
-      const url = new URL('https://www.googleapis.com/drive/v3/files');
-      url.searchParams.set('q', `'${folderId}' in parents and mimeType contains 'image/' and trashed=false`);
-      url.searchParams.set('key', apiKey);
-      url.searchParams.set('fields', 'nextPageToken, files(id,name,mimeType,imageMediaMetadata(width,height))');
-      url.searchParams.set('pageSize', '1000');
-      url.searchParams.set('orderBy', 'name_natural');
-      url.searchParams.set('supportsAllDrives', 'true');
-      url.searchParams.set('includeItemsFromAllDrives', 'true');
-      if (pageToken) url.searchParams.set('pageToken', pageToken);
-      const res = await fetch(url);
-      if (!res.ok) { let msg = 'HTTP ' + res.status; try { const e = await res.json(); msg = e.error?.message || msg; } catch (_) {} throw new Error(msg); }
-      const data = await res.json();
-      files.push(...(data.files || []));
-      pageToken = data.nextPageToken || '';
-    } while (pageToken);
-    return files;
+  // Liệt kê ảnh trong thư mục Drive QUA SERVER (key nằm server-side, không lộ ra client)
+  async function listDriveFolder(folderId) {
+    const r = await fetch('/api/drive-list?folderId=' + encodeURIComponent(folderId), { headers: apiHeaders(), cache: 'no-store' });
+    if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || ('HTTP ' + r.status)); }
+    const d = await r.json();
+    return d.files || [];
   }
-  async function buildDrivePhotos(folderText, apiKey) {
+  async function buildDrivePhotos(folderText) {
     const fid = extractFolderId(folderText);
     if (!fid) throw new Error('Không nhận ra ID thư mục Drive. Dán đúng link .../folders/...');
-    if (!apiKey) throw new Error('Chưa nhập Google Drive API Key (mục “Tài khoản NAS”).');
-    const files = await listDriveFolder(fid, apiKey);
+    const files = await listDriveFolder(fid);
     if (!files.length) throw new Error('Thư mục trống hoặc chưa chia sẻ “Bất kỳ ai có đường liên kết”.');
     return files.map((f, i) => {
       const md = f.imageMediaMetadata || {};
@@ -826,7 +814,7 @@
       if (!folder) { toast('Hãy dán link thư mục Google Drive'); return; }
       try {
         btn.disabled = true; btn.textContent = 'Đang tải ảnh…'; toast('Đang tải ảnh từ Google Drive…');
-        const photos = await buildDrivePhotos(folder, FIXED_DRIVE_KEY);
+        const photos = await buildDrivePhotos(folder);
         finalizeAlbum(meta, photos, folder); closeCreate();
         toast(`Đã tạo album “${rawName}” (${photos.length} ảnh)`);
       } catch (err) { toast('Lỗi: ' + (err.message || err)); }
@@ -1435,7 +1423,7 @@
     if (!al.sourceUrl) { toast('Album này không lấy từ Google Drive nên không đồng bộ được'); return; }
     const btn = $('#ad-sync'); const old = btn.innerHTML; btn.disabled = true; btn.textContent = 'Đang đồng bộ…';
     try {
-      const fresh = await buildDrivePhotos(al.sourceUrl, FIXED_DRIVE_KEY);
+      const fresh = await buildDrivePhotos(al.sourceUrl);
       // Giữ lựa chọn/ghi chú cho ảnh còn tồn tại (ghép theo Drive ID)
       const oldById = {};
       al.photos.forEach(p => { const id = p.driveId || driveIdFromThumb(p.src); if (id) oldById[id] = p; });
@@ -1490,7 +1478,7 @@
     const link = window.prompt('Dán link thư mục Google Drive cho album này:'); if (!link || !link.trim()) return;
     toast('Đang tải ảnh…');
     try {
-      const photos = await buildDrivePhotos(link.trim(), FIXED_DRIVE_KEY);
+      const photos = await buildDrivePhotos(link.trim());
       normalizeSets(detailAlbum);
       const id = genSetId();
       detailAlbum.sets.push({ id, name: name.trim() || 'Album', sourceUrl: link.trim(), photos });
