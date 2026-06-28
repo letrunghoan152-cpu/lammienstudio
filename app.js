@@ -118,6 +118,14 @@ function lh3(id, size = 's1600') {
   return `https://lh3.googleusercontent.com/d/${id}=${size}`;
 }
 
+/** Canonical Drive file id for a photo. `driveId` is always the real id;
+    legacy data stores a placeholder in `id` (e.g. "d0", or "a"+driveId),
+    while newer uploads put the real id directly in `id`. So prefer driveId. */
+function photoDriveId(p) { return (p && (p.driveId || p.id)) || ''; }
+
+/** lh3 thumbnail URL for a photo object (handles legacy placeholder ids). */
+function photoUrl(p, size = 's1600') { return lh3(photoDriveId(p), size); }
+
 /** Toast notification */
 let _toastTimer = null;
 function toast(msg, duration = 3000) {
@@ -1034,9 +1042,12 @@ function albumStatusPill(album) {
 }
 
 function albumCoverUrl(album) {
-  if (album.cover) return lh3(album.cover, 's400');
-  const first = (album.photos || [])[0];
-  return first ? lh3(first.id, 's400') : '';
+  const photos = album.photos || [];
+  let p = album.cover
+    ? photos.find(x => x.id === album.cover || x.driveId === album.cover || photoDriveId(x) === album.cover)
+    : null;
+  if (!p) p = photos[0];
+  return p ? photoUrl(p, 's400') : '';
 }
 
 const STATUS_COLORS = {
@@ -1909,7 +1920,7 @@ function renderDetailGrid() {
     grid.className = 'detail-grid list-view';
     grid.innerHTML = photos.map((p, i) => `
       <div class="photo-list-row ${S.detailPicked.has(p.id) ? 'picked' : ''}" data-idx="${i}" data-id="${p.id}">
-        <img src="${lh3(p.id, 's120')}" alt="${p.name}" loading="lazy">
+        <img src="${photoUrl(p, 's120')}" alt="${p.name}" loading="lazy">
         <span class="photo-name">${p.name || p.id}</span>
         ${sel.has(p.id) ? '<span class="sel-tag">✓ Đã chọn</span>' : ''}
         ${p.note ? `<span class="note-tag" title="${p.note}">📝</span>` : ''}
@@ -1919,7 +1930,7 @@ function renderDetailGrid() {
     grid.className = 'detail-grid grid-view';
     grid.innerHTML = photos.map((p, i) => `
       <div class="photo-thumb ${sel.has(p.id) ? 'selected' : ''} ${S.detailPicked.has(p.id) ? 'picked' : ''}" data-idx="${i}" data-id="${p.id}">
-        <img src="${lh3(p.id, 's400')}" alt="${p.name}" loading="lazy">
+        <img src="${photoUrl(p, 's400')}" alt="${p.name}" loading="lazy">
         ${p.note ? '<div class="note-dot" title="Có ghi chú">📝</div>' : ''}
         ${S.detailPickMode ? `<input type="checkbox" class="pick-cb" ${S.detailPicked.has(p.id) ? 'checked' : ''}>` : ''}
         ${sel.has(p.id) ? '<div class="sel-badge">✓</div>' : ''}
@@ -2044,7 +2055,7 @@ function renderLightbox() {
   const p = photos[S.lbIdx];
   if (!p) return;
 
-  document.getElementById('lb-img').src = lh3(p.id, 's1600');
+  document.getElementById('lb-img').src = photoUrl(p, 's1600');
   document.getElementById('lb-name').textContent = p.name || p.id;
   document.getElementById('lb-sub').textContent = `${S.lbIdx + 1} / ${photos.length}`;
 
@@ -2102,7 +2113,7 @@ function openCoverModal() {
 
   const photos = (album.photos || []).slice(0, 100);
   grid.innerHTML = photos.map(p =>
-    `<div class="cover-pick-thumb" data-id="${p.id}"><img src="${lh3(p.id, 's200')}" loading="lazy"></div>`
+    `<div class="cover-pick-thumb" data-id="${p.id}"><img src="${photoUrl(p, 's200')}" loading="lazy"></div>`
   ).join('');
 
   grid.querySelectorAll('[data-id]').forEach(el => {
@@ -2114,7 +2125,8 @@ function openCoverModal() {
       saveAlbumsLocal();
       apiPushAlbum(album).catch(() => {});
       const cov = document.getElementById('ad-cover');
-      if (cov) cov.src = lh3(el.dataset.id, 's400');
+      const cp = (album.photos || []).find(x => x.id === el.dataset.id);
+      if (cov) cov.src = photoUrl(cp, 's400');
       closeModal('cover-modal');
       toast('✓ Đã lưu ảnh bìa');
     };
@@ -2376,7 +2388,7 @@ function renderClientGrid() {
     const statusCls = r === 'selected' ? 'c-selected' : r === 'later' ? 'c-later' : r === 'skip' ? 'c-skip' : '';
     return `<div class="photo-item ${statusCls}" data-idx="${i}" data-id="${p.id}">
       <div class="photo-img-wrap">
-        <img src="${lh3(p.id, 's600')}" alt="${p.name || ''}" loading="lazy">
+        <img src="${photoUrl(p, 's600')}" alt="${p.name || ''}" loading="lazy">
         ${note ? `<div class="note-dot">📝</div>` : ''}
       </div>
       <div class="photo-actions">
@@ -3188,10 +3200,11 @@ function wireClientEvents() {
   });
   document.getElementById('lb-dl')?.addEventListener('click', () => {
     const p = S.lbPhotos[S.lbIdx];
-    if (!p?.id) return;
+    const did = photoDriveId(p);
+    if (!did) return;
     const a = document.createElement('a');
-    a.href = `https://drive.google.com/uc?export=download&id=${p.id}`;
-    a.download = p.name || p.id;
+    a.href = `https://drive.google.com/uc?export=download&id=${did}`;
+    a.download = p.name || did;
     a.click();
   });
 
