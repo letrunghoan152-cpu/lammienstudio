@@ -70,7 +70,7 @@ async function staffList() {
       name: (r[2] || '').trim(),
       active: !/^(off|kh[oó]a|0|no|x)$/i.test((r[3] || '').trim()),
       // Cột E: role — 'owner' hoặc 'staff' (mặc định 'staff')
-      role: /^owner$/i.test((r[4] || '').trim()) ? 'owner' : 'staff',
+      role: /^owner$/i.test((r[4] || '').trim()) ? 'owner' : /^editor$/i.test((r[4] || '').trim()) ? 'editor' : /^viewer$/i.test((r[4] || '').trim()) ? 'viewer' : 'editor',
     }))
     .filter(a => a.user && a.pass && !/^(user|t[aà]i kho[aả]n|account|username)$/i.test(a.user));
   staffCache = { at: Date.now(), list };
@@ -84,7 +84,7 @@ async function validUser(user, pass) {
     const list = await staffList();
     if (list) {
       const f = list.find(a => a.active && a.user === user && a.pass === pass);
-      if (f) return { user: f.user, name: f.name || f.user, role: f.role || 'staff' };
+      if (f) return { user: f.user, name: f.name || f.user, role: f.role || 'editor' };
     }
   } catch (_) { /* sheet lỗi -> không ai đăng nhập được (an toàn) */ }
   return null;
@@ -97,7 +97,7 @@ async function resolveToken(token) {
     const rows = await supa(`sessions?token=eq.${encodeURIComponent(token)}&select=user_id,user_name,role,expires_at`);
     if (!rows || !rows[0]) return null;
     if (new Date(rows[0].expires_at) < new Date()) return null; // hết hạn
-    return { user: rows[0].user_id, name: rows[0].user_name, role: rows[0].role || 'staff' };
+    return { user: rows[0].user_id, name: rows[0].user_name, role: rows[0].role || 'editor' };
   } catch (_) { return null; }
 }
 
@@ -163,7 +163,9 @@ const PERMISSIONS = {
 
 /** Kiểm tra quyền: can('editor', 'album', 'create') → true/false */
 function can(role, resource, action) {
-  return !!(PERMISSIONS[role || 'viewer']?.[resource]?.[action]);
+  // Map unknown/legacy roles (e.g. 'staff') to 'editor'
+  const r = Object.prototype.hasOwnProperty.call(PERMISSIONS, role) ? role : (role ? 'editor' : 'viewer');
+  return !!(PERMISSIONS[r]?.[resource]?.[action]);
 }
 
 module.exports = { supa, configured, checkAuth, checkAuthFull, validUser, sendStudioEmail, getConfig, setConfig, resolveToken, PERMISSIONS, can };
