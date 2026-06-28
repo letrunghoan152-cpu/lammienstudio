@@ -708,6 +708,7 @@ const UploadManager = {
   _savePendingTimer: null,
   _liveBytes: new Map(),   // taskKey → bytes uploaded for an in-flight file (smooth progress)
   _renderTimer: null,      // throttle progress re-renders
+  _speed: new Map(),       // albumId → { t, bytes, bps } rolling speed sample for ETA
 
   /** Throttled dashboard re-render (avoid render storms during byte progress). */
   _scheduleRender() {
@@ -749,7 +750,7 @@ const UploadManager = {
 
     // Create/update session
     if (!this._sessions.has(albumId)) {
-      this._sessions.set(albumId, { albumId, albumName, galleries: {} });
+      this._sessions.set(albumId, { albumId, albumName, galleries: {}, startedAt: Date.now() });
     }
     const session = this._sessions.get(albumId);
     if (!session.galleries[galleryId]) {
@@ -904,12 +905,19 @@ const UploadManager = {
       toast(`✓ Tải lên "${session.albumName}" hoàn tất — ${totalDone} ảnh.`);
     }
 
-    // Clean up session after a delay
+    // Flip the widget card into its success/error state and show it for a while.
+    session.completed = true;
+    session.doneCount = totalDone;
+    session.failedCount = totalFailed;
+    this._speed.delete(albumId);
+    renderUploadDashboard();
+
+    // Clean up session after a delay (success card lingers ~6s)
     setTimeout(() => {
       this._sessions.delete(albumId);
       this._broadcastProgress();
       renderUploadDashboard();
-    }, 4000);
+    }, 6000);
     renderAlbumsList();
   },
 
@@ -949,35 +957,106 @@ const UploadManager = {
   },
 };
 
-/** Render the fixed upload dashboard widget */
+/** Human-readable byte size, e.g. 12.4 MB */
+function fmtBytes(n) {
+  if (!n || n < 1) return '0 B';
+  if (n >= 1073741824) return (n / 1073741824).toFixed(1) + ' GB';
+  if (n >= 1048576) return (n / 1048576).toFixed(1) + ' MB';
+  if (n >= 1024) return Math.round(n / 1024) + ' KB';
+  return Math.round(n) + ' B';
+}
+/** Upload speed, e.g. 3.2 MB/s */
+function fmtSpeed(bps) { return (!bps || bps < 1) ? '—' : fmtBytes(bps) + '/s'; }
+/** ETA in Vietnamese, e.g. "2 phút 5s" */
+function fmtEta(sec) {
+  if (!isFinite(sec) || sec <= 0) return '—';
+  sec = Math.round(sec);
+  if (sec < 60) return sec + ' giây';
+  const m = Math.floor(sec / 60), s = sec % 60;
+  if (m < 60) return `${m} phút${s ? ` ${s}s` : ''}`;
+  const h = Math.floor(m / 60);
+  return `${h} giờ ${m % 60} phút`;
+}
+
+/** Render the fixed bottom-right upload status widget (speed / count / ETA / done) */
 function renderUploadDashboard() {
   const stack = document.getElementById('upload-stack');
   if (!stack) return;
   const sessions = [...UploadManager._sessions.values()];
   if (!sessions.length) { stack.innerHTML = ''; return; }
+  const now = Date.now();
+
   stack.innerHTML = sessions.map(s => {
     const galleries = Object.values(s.galleries);
     const totalDone = galleries.reduce((n, g) => n + g.done, 0);
     const totalTotal = galleries.reduce((n, g) => n + g.total, 0);
-    // Live bytes for files currently in flight for THIS album (local tab only).
+
+    // ── Completed card (success / partial-fail) ──
+    if (s.completed) {
+      const failed = s.failedCount || 0;
+      const ok = s.doneCount != null ? s.doneCount : totalDone;
+      const cls = failed ? 'err' : 'ok';
+      const name = failed ? `⚠ ${s.albumName}` : `✓ ${s.albumName}`;
+      const msg = failed
+        ? `${ok} ảnh thành công · ${failed} lỗi`
+        : `Tải lên thành công — ${ok} ảnh`;
+      return `<div class="uf-item ${cls}" data-album="${s.albumId}">
+        <div class="uf-head">
+          <span class="uf-name">${name}</span>
+          <button class="uf-x" data-close="${s.albumId}" title="Đóng">×</button>
+        </div>
+        <div class="uf-bar"><div class="uf-fill" style="width:100%"></div></div>
+        <div class="uf-stats"><span>${msg}</span><span>100%</span></div>
+      </div>`;
+    }
+
+    // ── In-progress card ──
     let liveBytes = 0;
     UploadManager._liveBytes.forEach((b, key) => { if (key.startsWith(s.albumId + '|')) liveBytes += b; });
     const bytesTotal = galleries.reduce((n, g) => n + (g.bytesTotal || 0), 0);
-    const bytesDone = galleries.reduce((n, g) => n + (g.bytesDone || 0), 0);
-    // Prefer byte-based progress (smooth, doesn't freeze on big files); fall back to file count.
+    const bytesDone = galleries.reduce((n, g) => n + (g.bytesDone || 0), 0) + liveBytes;
     const pct = bytesTotal
-      ? Math.min(100, Math.round((bytesDone + liveBytes) / bytesTotal * 100))
+      ? Math.min(100, Math.round(bytesDone / bytesTotal * 100))
       : (totalTotal ? Math.round(totalDone / totalTotal * 100) : 0);
-    const galleryRows = galleries.map(g =>
-      `<div class="upl-gallery"><span>${g.name}</span><span>${g.done}/${g.total}${g.failed.length ? ` ⚠${g.failed.length}` : ''}</span></div>`
-    ).join('');
-    return `<div class="upload-item" id="upl-${s.albumId}">
-      <div class="upl-name">${s.albumName}</div>
-      ${galleryRows}
-      <div class="upl-bar"><div class="upl-fill" style="width:${pct}%"></div></div>
-      <div class="upl-txt">${totalDone} / ${totalTotal} ảnh — ${pct}%</div>
+
+    // Rolling upload speed (EMA over byte deltas) → drives the ETA.
+    const prev = UploadManager._speed.get(s.albumId);
+    let bps = prev?.bps || 0;
+    if (prev && now - prev.t > 250) {
+      const inst = (bytesDone - prev.bytes) / ((now - prev.t) / 1000);
+      bps = inst < 0 ? bps : (prev.bps ? prev.bps * 0.6 + inst * 0.4 : inst);
+      UploadManager._speed.set(s.albumId, { t: now, bytes: bytesDone, bps });
+    } else if (!prev) {
+      UploadManager._speed.set(s.albumId, { t: now, bytes: bytesDone, bps: 0 });
+    }
+    const remaining = Math.max(0, bytesTotal - bytesDone);
+    const eta = bps > 0 ? remaining / bps : Infinity;
+
+    return `<div class="uf-item" data-album="${s.albumId}">
+      <div class="uf-head">
+        <span class="uf-name">⬆ ${s.albumName}</span>
+        <span class="uf-name-pct">${pct}%</span>
+      </div>
+      <div class="uf-bar"><div class="uf-fill" style="width:${pct}%"></div></div>
+      <div class="uf-stats">
+        <span>📷 ${totalDone}/${totalTotal} ảnh</span>
+        <span>⚡ ${fmtSpeed(bps)}</span>
+      </div>
+      <div class="uf-stats">
+        <span>${fmtBytes(bytesDone)} / ${fmtBytes(bytesTotal)}</span>
+        <span>⏳ còn ${fmtEta(eta)}</span>
+      </div>
     </div>`;
   }).join('');
+
+  // Dismiss a completed card immediately
+  stack.querySelectorAll('.uf-x[data-close]').forEach(btn => {
+    btn.onclick = () => {
+      UploadManager._sessions.delete(btn.dataset.close);
+      UploadManager._speed.delete(btn.dataset.close);
+      renderUploadDashboard();
+    };
+  });
 }
 
 /* ─────────────────────────────────────────────

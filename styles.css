@@ -721,6 +721,7 @@ img.logo { object-fit: contain; background: #efece5; padding: 2px; }
 .uf-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .uf-name { font-size: 13px; font-weight: 600; color: var(--text); flex: 1; min-width: 0;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.uf-name-pct { font-size: 12px; font-weight: 700; color: var(--brand-200); font-variant-numeric: tabular-nums; flex: none; }
 .uf-x { border: none; background: none; color: var(--muted); font-size: 18px; line-height: 1; cursor: pointer; padding: 0 2px; }
 .uf-x:hover { color: var(--text); }
 .uf-bar { height: 8px; border-radius: 99px; background: var(--panel-3); overflow: hidden; }
