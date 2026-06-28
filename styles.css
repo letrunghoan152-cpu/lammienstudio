@@ -1014,3 +1014,55 @@ img.logo { object-fit: contain; background: #efece5; padding: 2px; }
   text-overflow: ellipsis;
 }
 .dash-empty { font-size: 13px; color: var(--muted-2); text-align: center; padding: 20px 0; }
+
+/* ── Album card (grid view) — markup uses .album-card/.card-* ───────── */
+.album-card { background: var(--panel-2); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; display: flex; flex-direction: column; transition: border-color .18s, transform .18s; }
+.album-card:hover { border-color: #353b47; transform: translateY(-2px); }
+.card-cover { position: relative; padding-top: 62.5%; background-color: var(--panel-3); background-size: cover; background-position: 50% 50%; background-repeat: no-repeat; cursor: pointer; }
+.card-overlay { position: absolute; top: 8px; right: 8px; display: flex; gap: 6px; opacity: 0; transition: opacity .15s; }
+.album-card:hover .card-overlay { opacity: 1; }
+.card-btn { width: 30px; height: 30px; border-radius: 8px; border: none; background: rgba(0,0,0,.55); color: #fff; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
+.card-btn:hover { background: rgba(0,0,0,.8); }
+.card-uploading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 8px; background: rgba(0,0,0,.45); color: #fff; font-size: 13px; font-weight: 600; }
+.card-uploading .spin { width: 16px; height: 16px; border: 2px solid rgba(255,255,255,.4); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; }
+.card-body { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 7px; }
+.card-name { font-size: 14px; font-weight: 700; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card-name:hover { color: var(--brand-200); }
+.card-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+
+/* ── Album detail photo grid — markup uses .photo-thumb/.photo-list-row ─ */
+.photo-thumb { position: relative; aspect-ratio: 1/1; border-radius: 10px; overflow: hidden; background: var(--panel-2); border: 1px solid var(--line); cursor: pointer; transition: transform .12s, border-color .15s; }
+.photo-thumb:hover { transform: translateY(-2px); border-color: #353b47; }
+.photo-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.photo-thumb.selected { border-color: var(--green); }
+.photo-thumb.picked { border-color: var(--brand-200); }
+.photo-thumb .sel-badge { position: absolute; top: 6px; left: 6px; width: 22px; height: 22px; border-radius: 50%; background: var(--green); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; }
+.photo-thumb .note-dot { position: absolute; top: 6px; right: 6px; font-size: 13px; }
+.photo-thumb .pick-cb { position: absolute; bottom: 6px; left: 6px; width: 18px; height: 18px; }
+
+.photo-list-row { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 10px; background: var(--panel-2); border: 1px solid var(--line); cursor: pointer; }
+.photo-list-row:hover { border-color: #353b47; }
+.photo-list-row.picked { border-color: var(--brand-200); }
+.photo-list-row img { width: 46px; height: 46px; object-fit: cover; border-radius: 8px; flex: none; }
+.photo-list-row .photo-name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13px; }
+.photo-list-row .sel-tag { font-size: 11.5px; color: var(--green); font-weight: 700; }
+.photo-list-row .note-tag { font-size: 13px; }
+
+/* ── Client (customer) photo grid — markup uses .photo-item/.photo-img-wrap ─ */
+.photo-item { background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; transition: border-color .15s, transform .12s; }
+.photo-item:hover { border-color: #353b47; transform: translateY(-2px); }
+.photo-img-wrap { position: relative; aspect-ratio: 1/1; overflow: hidden; cursor: zoom-in; background: var(--panel-3); }
+.photo-img-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.photo-img-wrap .note-dot { position: absolute; top: 6px; right: 6px; font-size: 14px; }
+.photo-item.c-selected { border-color: var(--green); }
+.photo-item.c-later { border-color: var(--amber); }
+.photo-item.c-skip { opacity: .55; }
+.photo-actions { display: flex; gap: 6px; padding: 8px; }
+.pa-btn { flex: 1; height: 34px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-3); color: var(--text); font-size: 12.5px; font-weight: 600; cursor: pointer; transition: background .15s, border-color .15s; }
+.pa-btn:hover { border-color: #4a5160; }
+.pa-btn.active { background: var(--green); border-color: var(--green); color: #fff; }
+.pa-btn.later.active { background: var(--amber); border-color: var(--amber); color: #1a1a1a; }
+.photo-grid.list .photo-item { flex-direction: row; align-items: center; }
+.photo-grid.list .photo-img-wrap { width: 64px; height: 64px; aspect-ratio: auto; flex: none; border-radius: 8px; }
+.photo-grid.list .photo-actions { flex: 1; }
+.photo-grid.masonry .photo-img-wrap { aspect-ratio: auto; }
