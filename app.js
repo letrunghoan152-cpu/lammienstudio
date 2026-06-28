@@ -710,14 +710,17 @@ const UploadManager = {
   _renderTimer: null,      // throttle progress re-renders
   _speed: new Map(),       // albumId → { t, bytes, bps } rolling speed sample for ETA
 
-  /** Throttled dashboard re-render (avoid render storms during byte progress). */
+  /** Throttled dashboard re-render — 600ms during upload to prevent flicker. */
   _scheduleRender() {
     if (this._renderTimer) return;
     this._renderTimer = setTimeout(() => {
       this._renderTimer = null;
       renderUploadDashboard();
-    }, 400);
+    }, 600);
   },
+
+  /** Use _scheduleRender for non-completion renders to prevent flicker. */
+  _refreshDashboard() { this._scheduleRender(); },
 
   init() {
     try {
@@ -726,7 +729,7 @@ const UploadManager = {
         if (e.data?.type === 'progress') {
           // Another tab sent progress — merge into local display
           this._mergeRemoteSessions(e.data.sessions);
-          renderUploadDashboard();
+          this._scheduleRender();
         }
       };
     } catch (_) {}
@@ -843,7 +846,7 @@ const UploadManager = {
       this._liveBytes.delete(taskKey);
     }
     this._broadcastProgress();
-    renderUploadDashboard();
+    this._scheduleRender();
     // Debounced server push
     clearTimeout(this._savePendingTimer);
     this._savePendingTimer = setTimeout(() => {
@@ -858,10 +861,15 @@ const UploadManager = {
     album.photos = album.photos || [];
     album.photos.push({
       id: result.id,
+      driveId: result.id,
       name: result.name || result.id,
       url: lh3(result.id),
       galleryId: galleryId === '__default__' ? null : galleryId,
     });
+    // Use the first uploaded photo as cover automatically.
+    if (!album.cover && album.photos.length === 1) {
+      album.cover = result.id;
+    }
     album.lastActivity = Date.now();
     saveAlbumsLocal();
     if (S.detailId === albumId) renderDetailGrid();
@@ -2852,6 +2860,14 @@ async function init() {
     const sz = m[2] && m[2][0] === 'w' ? m[2] : 'w' + (m[2] ? m[2].slice(1) : '1600');
     img.src = `https://drive.google.com/thumbnail?id=${m[1]}&sz=${sz}`;
   }, true); // capture — img error events don't bubble
+
+  // Warn before closing/refreshing while photos are uploading.
+  window.addEventListener('beforeunload', (e) => {
+    if (UploadManager.activeCount > 0) {
+      e.preventDefault();
+      e.returnValue = 'Đang tải ảnh lên, nếu tắt tab ảnh sẽ bị mất. Bạn có chắc muốn thoát?';
+    }
+  });
 
   // Apply saved theme
   const savedTheme = lsGet(THEME_KEY) || 'light';
