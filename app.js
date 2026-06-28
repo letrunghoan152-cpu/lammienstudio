@@ -464,7 +464,11 @@ async function getDriveToken() {
 
 async function listDriveFolder(folderId) {
   const res = await apiFetch(`/api/drive-list?folderId=${encodeURIComponent(folderId)}`);
-  if (!res || !res.ok) throw new Error('Không liệt kê được folder Drive');
+  if (!res) throw new Error('Không kết nối được server');
+  if (!res.ok) {
+    const d = await res.json().catch(() => ({}));
+    throw new Error(d.error || `Lỗi ${res.status}`);
+  }
   const data = await res.json();
   return data.files || [];
 }
@@ -489,7 +493,7 @@ async function buildDrivePhotos(folderText) {
         });
       });
     } catch (e) {
-      toast('⚠ Không đọc được folder: ' + e.message);
+      toast('⚠ ' + (e.message || 'Không đọc được folder Drive'));
     }
   }
   return photos;
@@ -1769,7 +1773,7 @@ async function handleCreateSubmit(e) {
       const driveText = document.getElementById('drive-url').value.trim();
       if (!driveText) { toast('Vui lòng nhập link Google Drive'); return; }
       photos = await buildDrivePhotos(driveText);
-      if (!photos.length) { toast('⚠ Không tìm thấy ảnh trong folder Drive'); return; }
+      if (!photos.length) { toast('⚠ Không tìm thấy ảnh — folder trống hoặc chưa chia sẻ đúng cách với tài khoản Drive của studio'); return; }
     }
 
     const album = {
