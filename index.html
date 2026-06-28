@@ -98,9 +98,12 @@
       </div>
       <nav class="sb-nav">
         <a data-page="albums" class="active"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>Albums</a>
-        <a data-page="starred"><svg viewBox="0 0 24 24"><path d="M12 2l3 6.5 7 .9-5 4.8 1.3 7L12 18l-6.6 3.2L6.7 14l-5-4.8 7-.9z"/></svg>Gắn dấu sao</a>
         <a data-page="progress"><svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/></svg>Tiến độ hậu kỳ</a>
         <a data-page="trash"><svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M6 6l1 14a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-14"/></svg>Thùng rác <span class="sb-badge" id="trash-badge" hidden>0</span></a>
+        <div class="sb-nav-section">Hệ thống</div>
+        <a data-page="staff"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>Nhân sự</a>
+        <a data-page="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Cài đặt</a>
+        <a data-page="perms"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Phân quyền</a>
       </nav>
       <div class="sb-foot">
         <button class="sb-drive" id="sb-drive" title="Kết nối Google Drive để upload ảnh">
@@ -128,27 +131,46 @@
           <button class="btn primary" id="new-album-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Tạo album mới</button>
         </div>
 
-        <div class="toolbar">
-          <div class="filters" id="filters"></div>
-          <p class="tip">Chọn trạng thái để xem việc cần làm cho từng nhóm album.</p>
+        <!-- Filter bar -->
+        <div class="album-filter-bar" id="album-filter-bar">
+          <div class="alb-search">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            <input type="text" id="alb-q" placeholder="Tìm tên khách, ngày chụp…" autocomplete="off">
+          </div>
+
+          <div class="alb-divider"></div>
+
+          <div class="seg mini" id="alb-sort">
+            <button data-sort="date" class="active" title="Sắp xếp theo ngày chụp"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Ngày</button>
+            <button data-sort="name" title="Sắp xếp theo tên A→Z"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h10M4 18h6"/></svg>Tên</button>
+            <button data-sort="deadline" title="Sắp xếp theo deadline gần nhất"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>Deadline</button>
+            <button data-sort="photos" title="Sắp xếp theo số ảnh nhiều nhất"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>Ảnh</button>
+          </div>
+
+          <div class="alb-divider"></div>
+
+          <select class="alb-sel" id="alb-month"><option value="">Tất cả tháng</option></select>
+
+          <div class="alb-divider"></div>
+
+          <div class="seg mini" id="alb-viewmode">
+            <button data-v="grid" class="active" title="Grid — dạng thẻ ảnh bìa"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></button>
+            <button data-v="list" title="List — dạng bảng chi tiết"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg></button>
+            <button data-v="kanban" title="Kanban — cột theo trạng thái"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="4" height="18" rx="1"/><rect x="10" y="3" width="4" height="12" rx="1"/><rect x="17" y="3" width="4" height="15" rx="1"/></svg></button>
+            <button data-v="masonry" title="Masonry — kiểu Pinterest"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="3" y="15" width="7" height="6" rx="1.5"/><rect x="14" y="11" width="7" height="10" rx="1.5"/></svg></button>
+          </div>
         </div>
 
-        <div class="section-card">
-          <div class="section-head-row">
-            <h2>Albums</h2>
-            <span class="grow"></span>
-            <div class="seg mini" id="albums-view">
-              <button data-v="grid" class="active" title="Dạng thẻ"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></button>
-              <button data-v="list" title="Dạng danh sách"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg></button>
-            </div>
-          </div>
-          <div class="albums-grid" id="albums-grid"></div>
-          <div class="empty" id="albums-empty" hidden>
-            <div class="ico">📁</div>
-            <strong>Chưa có album nào</strong>
-            <span>Bấm “Tạo album mới” để bắt đầu gửi ảnh cho khách chọn.</span>
-            <button class="btn primary" id="empty-new-btn" style="margin-top:6px">+ Tạo album mới</button>
-          </div>
+        <!-- Status chips -->
+        <div class="album-status-bar" id="album-status-bar"></div>
+
+        <div class="alb-count-label" id="alb-count-label"></div>
+        <div id="albums-grid"></div>
+        <div class="empty" id="albums-empty" hidden>
+          <div class="ico">📁</div>
+          <strong>Chưa có album nào</strong>
+          <span>Bấm “Tạo album mới” để bắt đầu gửi ảnh cho khách chọn.</span>
+          <button class="btn primary" id="empty-new-btn" style="margin-top:6px">+ Tạo album mới</button>
         </div>
       </section>
 
@@ -205,6 +227,77 @@
             <strong>Thùng rác trống</strong>
             <span>Album bạn xoá sẽ nằm ở đây trước khi xoá hẳn.</span>
           </div>
+        </div>
+      </section>
+
+      <!-- ===== NHÂN SỰ ===== -->
+      <section class="page" id="page-staff">
+        <div class="page-head">
+          <div>
+            <h1>Nhân sự — phân công chụp</h1>
+            <p class="sub">Xem từng photographer đã up bao nhiêu bộ, số ảnh tổng và các bộ cụ thể.</p>
+          </div>
+        </div>
+        <div id="staff-list"></div>
+      </section>
+
+      <!-- ===== CÀI ĐẶT ===== -->
+      <section class="page" id="page-settings">
+        <div class="page-head">
+          <div><h1>Cài đặt</h1><p class="sub">Thông tin studio, kết nối Drive, cấu hình xuất dữ liệu.</p></div>
+        </div>
+        <div class="section-card" style="max-width:480px">
+          <div class="settings-group">
+            <h3>Google Drive studio</h3>
+            <p class="sub">Kết nối Drive để toàn bộ nhân sự upload ảnh mà không cần đăng nhập Google riêng.</p>
+            <button class="btn primary" id="settings-drive-connect">Kết nối lại Drive (cập nhật Sheets scope)</button>
+          </div>
+          <div class="settings-group">
+            <h3>Google Sheet xuất dữ liệu</h3>
+            <p class="sub">Xuất toàn bộ album và danh sách ảnh khách đã chọn ra Google Sheet.</p>
+            <button class="btn primary" id="settings-sheet-export">Xuất ra Google Sheet</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== PHÂN QUYỀN ===== -->
+      <section class="page" id="page-perms">
+        <div class="page-head">
+          <div><h1>Phân quyền nhân sự</h1><p class="sub">3 cấp độ — thay đổi trong bảng nhân sự của studio.</p></div>
+        </div>
+        <div class="perms-grid">
+          <div class="perm-card perm-owner">
+            <div class="perm-role">👑 Chủ studio <code>owner</code></div>
+            <ul>
+              <li>Tạo, sửa, xoá vĩnh viễn album</li>
+              <li>Kết nối Google Drive studio</li>
+              <li>Xuất dữ liệu ra Google Sheet</li>
+              <li>Xem và dọn sạch Thùng rác</li>
+              <li>Truy cập Cài đặt hệ thống</li>
+            </ul>
+          </div>
+          <div class="perm-card perm-editor">
+            <div class="perm-role">🎨 Nhân sự chính <code>editor</code></div>
+            <ul>
+              <li>Tạo, sửa album — không xoá vĩnh viễn</li>
+              <li>Tạo, xoá gallery con</li>
+              <li>Upload ảnh lên Drive</li>
+              <li>Xuất dữ liệu ra Sheet</li>
+              <li>Xem Thùng rác (không dọn sạch)</li>
+            </ul>
+          </div>
+          <div class="perm-card perm-viewer">
+            <div class="perm-role">👁 Nhân sự phụ <code>viewer</code></div>
+            <ul>
+              <li>Xem tất cả album</li>
+              <li>Upload ảnh lên Drive</li>
+              <li>Không tạo/sửa/xoá album</li>
+              <li>Không truy cập Thùng rác</li>
+            </ul>
+          </div>
+        </div>
+        <div class="hint" style="margin-top:16px">
+          Để thay đổi role: cập nhật cột vai trò trong bảng nhân sự của studio → <code>owner</code> / <code>editor</code> / <code>viewer</code> → nhân sự đăng xuất và đăng nhập lại.
         </div>
       </section>
 

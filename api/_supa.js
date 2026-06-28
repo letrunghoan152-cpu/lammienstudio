@@ -37,7 +37,9 @@ async function setConfig(key, value) {
   });
 }
 
-/* ---- Đọc danh sách nhân sự từ Google Sheet (cột: A tài khoản, B mật khẩu, C tên, D trạng thái) ---- */
+/* ---- Đọc danh sách nhân sự từ Google Sheet ----
+   Cột: A=username, B=password, C=tên, D=trạng thái, E=role (owner/staff)
+*/
 function parseCsv(text) {
   const rows = []; let row = [], cur = '', q = false;
   for (let i = 0; i < text.length; i++) {
@@ -67,35 +69,57 @@ async function staffList() {
       pass: (r[1] || '').trim(),
       name: (r[2] || '').trim(),
       active: !/^(off|kh[oó]a|0|no|x)$/i.test((r[3] || '').trim()),
+      // Cột E: role — 'owner' hoặc 'staff' (mặc định 'staff')
+      role: /^owner$/i.test((r[4] || '').trim()) ? 'owner' : 'staff',
     }))
     .filter(a => a.user && a.pass && !/^(user|t[aà]i kho[aả]n|account|username)$/i.test(a.user));
   staffCache = { at: Date.now(), list };
   return list;
 }
 
-// Trả về {user, name} nếu hợp lệ; null nếu sai
+// Trả về {user, name, role} nếu hợp lệ; null nếu sai
 async function validUser(user, pass) {
   if (!user || !pass) return null;
-  // CHỈ chấp nhận tài khoản từ Google Sheet — không có tài khoản mặc định/hardcode
   try {
     const list = await staffList();
     if (list) {
       const f = list.find(a => a.active && a.user === user && a.pass === pass);
-      if (f) return { user: f.user, name: f.name || f.user };
+      if (f) return { user: f.user, name: f.name || f.user, role: f.role || 'staff' };
     }
   } catch (_) { /* sheet lỗi -> không ai đăng nhập được (an toàn) */ }
   return null;
 }
 
+/* ---- Session token (bảng sessions trong Supabase) ---- */
+async function resolveToken(token) {
+  if (!token) return null;
+  try {
+    const rows = await supa(`sessions?token=eq.${encodeURIComponent(token)}&select=user_id,user_name,role,expires_at`);
+    if (!rows || !rows[0]) return null;
+    if (new Date(rows[0].expires_at) < new Date()) return null; // hết hạn
+    return { user: rows[0].user_id, name: rows[0].user_name, role: rows[0].role || 'staff' };
+  } catch (_) { return null; }
+}
+
+// checkAuth: trả bool (backward compat)
 async function checkAuth(req) {
-  return !!(await validUser(req.headers['x-user'], req.headers['x-pass']));
+  return !!(await checkAuthFull(req));
+}
+
+// checkAuthFull: trả {user, name, role} hoặc null — dùng khi cần kiểm tra role
+async function checkAuthFull(req) {
+  // Ưu tiên token mới (x-token header)
+  const token = req.headers['x-token'];
+  if (token) return resolveToken(token);
+  // Backward compat: x-user/x-pass (sẽ bỏ dần sau khi tất cả client chuyển sang token)
+  return validUser(req.headers['x-user'], req.headers['x-pass']);
 }
 
 /* ---- Gửi email thông báo cho nhân sự (qua Resend) ---- */
 async function sendStudioEmail(subject, html) {
   const key = process.env.RESEND_API_KEY;
   const to = process.env.NOTIFY_EMAIL;
-  if (!key || !to) return false; // chưa cấu hình -> bỏ qua
+  if (!key || !to) return false;
   const from = process.env.FROM_EMAIL || 'Lam Mien Studio <onboarding@resend.dev>';
   try {
     const res = await fetch('https://api.resend.com/emails', {
@@ -107,4 +131,39 @@ async function sendStudioEmail(subject, html) {
   } catch (_) { return false; }
 }
 
-module.exports = { supa, configured, checkAuth, validUser, sendStudioEmail, getConfig, setConfig };
+/* ─── Bảng phân quyền theo role ──────────────────────────────────────────────
+   Roles: owner (chủ studio) | editor (nhân sự chính) | viewer (nhân sự phụ)
+   ─────────────────────────────────────────────────────────────────────────── */
+const PERMISSIONS = {
+  owner: {
+    album:    { create: true,  edit: true,  trash: true,  delete: true,  viewAll: true  },
+    gallery:  { create: true,  edit: true,  delete: true                                },
+    drive:    { connect: true, upload: true                                              },
+    progress: { view: true                                                               },
+    trash:    { view: true,    empty: true                                               },
+    settings: { view: true,    manage: true                                              },
+  },
+  editor: {
+    album:    { create: true,  edit: true,  trash: true,  delete: false, viewAll: true  },
+    gallery:  { create: true,  edit: true,  delete: true                                },
+    drive:    { connect: false, upload: true                                             },
+    progress: { view: true                                                               },
+    trash:    { view: true,    empty: false                                              },
+    settings: { view: false,   manage: false                                            },
+  },
+  viewer: {
+    album:    { create: false, edit: false, trash: false, delete: false, viewAll: true  },
+    gallery:  { create: false, edit: false, delete: false                               },
+    drive:    { connect: false, upload: true                                             },
+    progress: { view: false                                                              },
+    trash:    { view: false,   empty: false                                              },
+    settings: { view: false,   manage: false                                            },
+  },
+};
+
+/** Kiểm tra quyền: can('editor', 'album', 'create') → true/false */
+function can(role, resource, action) {
+  return !!(PERMISSIONS[role || 'viewer']?.[resource]?.[action]);
+}
+
+module.exports = { supa, configured, checkAuth, checkAuthFull, validUser, sendStudioEmail, getConfig, setConfig, resolveToken, PERMISSIONS, can };
