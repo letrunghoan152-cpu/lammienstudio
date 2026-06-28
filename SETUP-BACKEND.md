@@ -18,6 +18,18 @@ create table albums (
   data jsonb not null,
   updated_at timestamptz default now()
 );
+
+-- Bảng session token đăng nhập nhân sự (BẮT BUỘC, nếu không sẽ bị login-rồi-văng)
+create table if not exists public.sessions (
+  token       text primary key,
+  user_id     text not null,
+  user_name   text,
+  role        text default 'staff',
+  expires_at  timestamptz not null,
+  created_at  timestamptz default now()
+);
+create index if not exists sessions_expires_at_idx on public.sessions (expires_at);
+alter table public.sessions disable row level security; -- giống albums/app_config (app dùng service key)
 ```
 
 4. Menu trái → **Project Settings** (bánh răng) → **API**:

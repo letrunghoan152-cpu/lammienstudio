@@ -7,3 +7,6 @@ SETUP-BACKEND.md
 Hệ thống album mới.md
 *.log
 .DS_Store
+.env
+.env*.local
+.vercel

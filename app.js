@@ -988,12 +988,12 @@ function navigateFromHash() {
   if (hash.startsWith('album/')) {
     const id = hash.slice(6);
     openAlbumDetail(id, true);
-  } else if (['albums', 'progress', 'trash', 'staff', 'settings', 'perms'].includes(hash)) {
+  } else if (['dashboard', 'albums', 'progress', 'trash', 'staff', 'settings', 'perms'].includes(hash)) {
     showPage(hash);
     renderCurrentPage();
   } else {
-    showPage('albums');
-    renderAlbumsList();
+    showPage('dashboard');
+    renderDashboard();
   }
 }
 
@@ -1002,12 +1002,14 @@ function setHash(h) {
 }
 
 function renderCurrentPage() {
-  if (S.page === 'albums') renderAlbumsList();
+  if (S.page === 'dashboard') renderDashboard();
+  else if (S.page === 'albums') renderAlbumsList();
   else if (S.page === 'progress') renderProgressPage();
   else if (S.page === 'trash') renderTrashPage();
   else if (S.page === 'staff') renderStaffPage();
+  else if (S.page === 'settings') { renderSettings(); checkDriveStatus(); }
   else if (S.page === 'albumdetail' && S.detailId) renderDetailGrid();
-  // settings & perms are static HTML — no render needed
+  // perms is static HTML — no render needed
 }
 
 /* ─────────────────────────────────────────────
@@ -1286,6 +1288,109 @@ function renderAlbumsList() {
       };
     });
   });
+}
+
+/* ─────────────────────────────────────────────
+   11a. DASHBOARD (Tổng quan)
+   ───────────────────────────────────────────── */
+
+function renderDashboard() {
+  const active = S.albums.filter(a => !a.trashed);
+
+  const byStatus = st => active.filter(a => (a.status || 'new') === st).length;
+  const choosing = byStatus('choosing');
+  const doneNotEdited = byStatus('done');
+  const editing = byStatus('editing');
+
+  // Deadlines (số ngày còn lại)
+  const withDl = active
+    .filter(a => a.deadline)
+    .map(a => ({ a, d: Math.ceil((new Date(a.deadline) - Date.now()) / 86400000) }));
+  const overdue = withDl.filter(x => x.d < 0).sort((x, y) => x.d - y.d);
+  const soon = withDl.filter(x => x.d >= 0 && x.d <= 3).sort((x, y) => x.d - y.d);
+  const uploadingCount = active.filter(a => albumIsUploading(a)).length;
+
+  const g = document.getElementById('dash-greeting');
+  if (g) g.textContent = `Chào ${S.auth?.name || ''} 👋`;
+
+  // Stat cards (bấm vào lọc nhanh sang trang Albums)
+  const stats = [
+    { label: 'Đang chờ khách chọn', n: choosing, color: 'var(--amber)', status: 'choosing' },
+    { label: 'Đã chốt, chờ hậu kỳ', n: doneNotEdited, color: 'var(--green)', status: 'done' },
+    { label: 'Đang hậu kỳ', n: editing, color: 'var(--blue)', status: 'editing' },
+    { label: 'Sắp / đang trễ', n: overdue.length + soon.length, color: 'var(--red)', status: null },
+    { label: 'Đang upload', n: uploadingCount, color: 'var(--teal)', status: null },
+  ];
+  const statsEl = document.getElementById('dash-stats');
+  if (statsEl) statsEl.innerHTML = stats.map(s =>
+    `<div class="dash-stat"${s.status ? ` onclick="dashGoStatus('${s.status}')" style="cursor:pointer"` : ''}>
+       <div class="dash-stat-n" style="color:${s.color}">${s.n}</div>
+       <div class="dash-stat-l">${s.label}</div>
+     </div>`
+  ).join('');
+
+  // Deadline list (trễ trước, sắp trễ sau)
+  const dlEl = document.getElementById('dash-deadline');
+  const dlItems = [...overdue, ...soon].slice(0, 8);
+  if (dlEl) dlEl.innerHTML = dlItems.length ? dlItems.map(({ a, d }) => {
+    const cls = d < 0 ? 'card-dl-over' : 'card-dl-soon';
+    const txt = d < 0 ? `Trễ ${-d} ngày` : d === 0 ? 'Hôm nay' : `Còn ${d} ngày`;
+    return `<div class="dash-row" onclick="openAlbum('${a.id}')">
+      <span class="dash-row-name">${a.name || 'Album'}</span>
+      ${albumStatusPill(a)}
+      <span class="${cls}" style="margin-top:0;white-space:nowrap">${txt}</span>
+    </div>`;
+  }).join('') : '<div class="dash-empty">Không có album nào sắp trễ 🎉</div>';
+
+  // Recent activity
+  const recent = [...active].sort((a, b) => (b.lastActivity || b.createdAt || 0) - (a.lastActivity || a.createdAt || 0)).slice(0, 6);
+  const recEl = document.getElementById('dash-recent');
+  if (recEl) recEl.innerHTML = recent.length ? recent.map(a => {
+    const sel = albumSelCount(a), total = (a.photos || []).length;
+    return `<div class="dash-row" onclick="openAlbum('${a.id}')">
+      <span class="dash-row-name">${a.name || 'Album'}</span>
+      ${albumStatusPill(a)}
+      <span style="font-size:12px;color:var(--muted);white-space:nowrap">${sel}/${total} ảnh</span>
+    </div>`;
+  }).join('') : '<div class="dash-empty">Chưa có album nào.</div>';
+}
+
+/** Bấm thẻ thống kê → sang trang Albums đã lọc sẵn theo trạng thái. */
+function dashGoStatus(st) {
+  S.filterStatus = st;
+  showPage('albums');
+  setHash('albums');
+  renderAlbumsList();
+}
+
+/* ─────────────────────────────────────────────
+   11c. CÀI ĐẶT PAGE (render động)
+   ───────────────────────────────────────────── */
+
+// Renders from S only (no fetch) — the live Drive re-check is kicked once on navigation
+// (see renderCurrentPage), and its updateDriveDot() callback re-renders this page.
+function renderSettings() {
+  const role = S.auth?.role || 'viewer';
+
+  const acc = document.getElementById('settings-account');
+  if (acc) acc.innerHTML =
+    `<div class="set-row"><span class="set-row-l">Tên</span><span class="set-row-v">${S.auth?.name || '—'}</span></div>
+     <div class="set-row"><span class="set-row-l">Vai trò</span><span class="set-row-v"><span class="role-badge role-${role}">${roleLabel(role)}</span></span></div>`;
+
+  const ds = document.getElementById('settings-drive-status');
+  if (ds) {
+    const connected = !!S.driveConnected;
+    ds.innerHTML =
+      `<div class="set-row"><span class="set-row-l">Trạng thái</span>
+        <span class="set-row-v"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;background:${connected ? 'var(--green)' : 'var(--amber)'}"></span>${connected ? 'Đã kết nối' : 'Chưa kết nối'}</span></div>`
+      + (connected && S.driveEmail ? `<div class="set-row"><span class="set-row-l">Tài khoản</span><span class="set-row-v">${S.driveEmail}</span></div>` : '');
+  }
+
+  // Gate actions by role
+  const connectBtn = document.getElementById('settings-drive-connect');
+  if (connectBtn) connectBtn.hidden = !can('drive', 'connect');
+  const exportGroup = document.getElementById('settings-export-group');
+  if (exportGroup) exportGroup.hidden = !can('album', 'edit');
 }
 
 /* ─────────────────────────────────────────────
@@ -2386,6 +2491,9 @@ async function checkDriveStatus() {
 }
 
 function updateDriveDot(connected, email) {
+  S.driveConnected = connected;
+  S.driveEmail = email || '';
+  if (S.page === 'settings') renderSettings();
   const dot = document.getElementById('sb-drive-dot');
   const title = document.getElementById('sb-drive-title');
   const sub = document.getElementById('sb-drive-sub');
@@ -2436,14 +2544,18 @@ function applyRBAC() {
   // Sidebar nav items
   const navProgress = document.querySelector('#sb-nav [data-page="progress"]');
   const navTrash    = document.querySelector('#sb-nav [data-page="trash"]');
+  const navSettings = document.querySelector('#sb-nav [data-page="settings"]');
   if (navProgress) navProgress.hidden = !can('progress', 'view');
   if (navTrash)    navTrash.hidden    = !can('trash', 'view');
+  if (navSettings) navSettings.hidden = !can('settings', 'view');
 
   // New album button
   const newAlbumBtn  = document.getElementById('new-album-btn');
   const emptyNewBtn  = document.getElementById('empty-new-btn');
+  const dashNewBtn   = document.getElementById('dash-new-btn');
   if (newAlbumBtn) newAlbumBtn.hidden = !can('album', 'create');
   if (emptyNewBtn) emptyNewBtn.hidden = !can('album', 'create');
+  if (dashNewBtn)  dashNewBtn.hidden  = !can('album', 'create');
 
   // Trash empty button
   const trashEmptyBtn = document.getElementById('trash-empty');
@@ -2558,9 +2670,9 @@ function showApp() {
   loadAlbumsLocal();
   restoreActiveUploads();
   renderTrashBadge();
-  renderAlbumsList();
-  showPage('albums');
-  setHash('albums');
+  renderDashboard();
+  showPage('dashboard');
+  setHash('dashboard');
 
   // Start sync
   SyncManager.refresh();
@@ -2732,6 +2844,9 @@ async function init() {
     connectStudioDrive();
   });
   document.getElementById('settings-sheet-export')?.addEventListener('click', () => exportToSheet());
+  document.getElementById('settings-open-perms')?.addEventListener('click', () => {
+    showPage('perms'); setHash('perms');
+  });
 
   // Progress view toggle
   document.querySelectorAll('#prog-view [data-v]').forEach(btn => {
@@ -2755,6 +2870,7 @@ async function init() {
   // New album
   document.getElementById('new-album-btn')?.addEventListener('click', openCreateModal);
   document.getElementById('empty-new-btn')?.addEventListener('click', openCreateModal);
+  document.getElementById('dash-new-btn')?.addEventListener('click', openCreateModal);
 
   // Create modal
   document.getElementById('create-close')?.addEventListener('click', () => closeModal('create-modal'));

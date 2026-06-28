@@ -944,3 +944,73 @@ img.logo { object-fit: contain; background: #efece5; padding: 2px; }
 .settings-group:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
 .settings-group h3 { font-size: 14px; font-weight: 700; margin: 0 0 6px; }
 .settings-group .sub { color: var(--muted); font-size: 13px; margin: 0 0 12px; }
+.set-rows { display: flex; flex-direction: column; gap: 2px; }
+.set-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--line-soft); font-size: 13px; }
+.set-row:last-child { border-bottom: none; }
+.set-row-l { color: var(--muted); }
+.set-row-v { font-weight: 600; text-align: right; }
+
+/* =============================================
+   DASHBOARD (Tổng quan)
+   ============================================= */
+.dash-stats {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+  margin-bottom: 22px;
+}
+@media (max-width: 1100px) { .dash-stats { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 680px)  { .dash-stats { grid-template-columns: repeat(2, 1fr); } }
+.dash-stat {
+  background: var(--panel);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  transition: border-color .12s, transform .12s;
+}
+.dash-stat[onclick]:hover { border-color: var(--line); transform: translateY(-2px); }
+.dash-stat-n { font-size: 30px; font-weight: 800; line-height: 1; }
+.dash-stat-l { font-size: 12px; color: var(--muted); margin-top: 7px; }
+
+.dash-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+@media (max-width: 860px) { .dash-cols { grid-template-columns: 1fr; } }
+.dash-col {
+  background: var(--panel);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+}
+.dash-section-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 10px;
+}
+.dash-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 4px;
+  border-bottom: 1px solid var(--line-soft);
+  cursor: pointer;
+  transition: background .12s;
+  border-radius: 6px;
+}
+.dash-row:last-child { border-bottom: none; }
+.dash-row:hover { background: var(--panel-2); }
+.dash-row-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dash-empty { font-size: 13px; color: var(--muted-2); text-align: center; padding: 20px 0; }
