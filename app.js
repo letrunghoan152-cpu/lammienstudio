@@ -294,7 +294,7 @@ async function apiGetAlbums() {
 async function apiPushAlbum(album) {
   await apiFetch('/api/albums', {
     method: 'POST',
-    body: JSON.stringify(album),
+    body: JSON.stringify({ album }),   // server expects { album: {...} }
   });
 }
 
@@ -427,9 +427,12 @@ const SyncManager = {
         return sv;
       });
 
-      // Preserve any local-only albums (not yet pushed)
+      // Preserve local-only albums (not on server yet) and push them up.
       S.albums.forEach(lo => {
-        if (!merged.find(m => m.id === lo.id)) merged.push(lo);
+        if (!merged.find(m => m.id === lo.id)) {
+          merged.push(lo);
+          apiPushAlbum(lo).catch(() => {}); // upload albums that never made it to server
+        }
       });
 
       S.albums = merged.filter(a => !a.trashed);
