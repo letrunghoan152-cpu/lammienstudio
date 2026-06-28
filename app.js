@@ -98,7 +98,9 @@ const PERMISSIONS = {
 
 /** Kiểm tra quyền của user hiện tại */
 function can(resource, action) {
-  const role = S.auth?.role || 'viewer';
+  const rawRole = S.auth?.role || 'viewer';
+  // Map unknown/legacy roles (e.g. 'staff') to 'editor' as safe default
+  const role = Object.prototype.hasOwnProperty.call(PERMISSIONS, rawRole) ? rawRole : 'editor';
   return !!(PERMISSIONS[role]?.[resource]?.[action]);
 }
 
@@ -232,13 +234,13 @@ async function verifySessionAndStart() {
     if (!res.ok) { showLogin(); return; }
     const data = await res.json();
     if (!data.ok) { showLogin(); return; }
-    S.auth = { token: saved.token, name: data.name || saved.name, role: data.role || saved.role || 'staff' };
+    S.auth = { token: saved.token, name: data.name || saved.name, role: data.role || saved.role || 'editor' };
     showApp();
   } catch {
     // Network error — allow offline access if we have local albums
     const local = lsGet(ALBUMS_KEY);
     if (saved.token && local) {
-      S.auth = { token: saved.token, name: saved.name || '?', role: saved.role || 'staff' };
+      S.auth = { token: saved.token, name: saved.name || '?', role: saved.role || 'editor' };
       showApp();
     } else {
       showLogin();
@@ -255,7 +257,7 @@ async function doLogin(user, pass) {
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Đăng nhập thất bại');
   // data: { ok, token, name, role, sync }
-  const auth = { token: data.token || null, name: data.name || user, role: data.role || 'staff' };
+  const auth = { token: data.token || null, name: data.name || user, role: data.role || 'editor' };
   S.auth = auth;
   lsSet(STORAGE_KEY, auth);
   return data;
@@ -1018,12 +1020,13 @@ function renderCurrentPage() {
 
 const STATUS_LABELS = {
   new: 'Mới tạo',
+  waiting: 'Đang chờ',
   choosing: 'Đang chọn',
   done: 'Đã chốt',
   editing: 'Đang hậu kỳ',
   delivered: 'Đã giao',
 };
-const STATUS_ORDER = ['new', 'choosing', 'done', 'editing', 'delivered'];
+const STATUS_ORDER = ['new', 'waiting', 'choosing', 'done', 'editing', 'delivered'];
 
 function albumStatusPill(album) {
   const s = album.status || 'new';
@@ -1037,7 +1040,7 @@ function albumCoverUrl(album) {
 }
 
 const STATUS_COLORS = {
-  new: 'var(--muted-2)', choosing: 'var(--amber)', done: 'var(--green)',
+  new: 'var(--muted-2)', waiting: 'var(--muted)', choosing: 'var(--amber)', done: 'var(--green)',
   editing: 'var(--blue)', delivered: 'var(--teal)',
 };
 
