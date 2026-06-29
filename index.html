@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <script>try{document.documentElement.setAttribute('data-theme',localStorage.getItem('lamMienTheme')||'light');}catch(e){document.documentElement.setAttribute('data-theme','light');}</script>
+  <script>try{if(localStorage.getItem('lamMienThemeV')!=='2'){localStorage.removeItem('lamMienTheme');localStorage.setItem('lamMienThemeV','2');}document.documentElement.setAttribute('data-theme',localStorage.getItem('lamMienTheme')||'light');}catch(e){document.documentElement.setAttribute('data-theme','light');}</script>
   <link rel="stylesheet" href="styles.css?v=20260629a">
   <link rel="icon" href="logo.svg">
 </head>
