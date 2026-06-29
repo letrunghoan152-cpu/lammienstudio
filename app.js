@@ -1135,6 +1135,10 @@ function albumStatusPill(album) {
   return `<span class="status-pill s-${s}"><span class="dot"></span>${STATUS_LABELS[s] || s}</span>`;
 }
 
+function albumStatusLabel(album) {
+  return STATUS_LABELS[album.status || 'new'] || 'Mới tạo';
+}
+
 function albumCoverUrl(album) {
   const photos = album.photos || [];
   let p = album.cover
@@ -1410,55 +1414,86 @@ function renderDashboard() {
   const doneNotEdited = byStatus('done');
   const editing = byStatus('editing');
 
-  // Deadlines (số ngày còn lại)
   const withDl = active
     .filter(a => a.deadline)
     .map(a => ({ a, d: Math.ceil((new Date(a.deadline) - Date.now()) / 86400000) }));
   const overdue = withDl.filter(x => x.d < 0).sort((x, y) => x.d - y.d);
   const soon = withDl.filter(x => x.d >= 0 && x.d <= 3).sort((x, y) => x.d - y.d);
   const uploadingCount = active.filter(a => albumIsUploading(a)).length;
+  const overdueCount = overdue.length;
 
   const g = document.getElementById('dash-greeting');
   if (g) g.textContent = `Chào ${S.auth?.name || ''} 👋`;
 
-  // Stat cards (bấm vào lọc nhanh sang trang Albums)
-  const stats = [
-    { label: 'Đang chờ khách chọn', n: choosing, color: 'var(--amber)', status: 'choosing' },
-    { label: 'Đã chốt, chờ hậu kỳ', n: doneNotEdited, color: 'var(--green)', status: 'done' },
-    { label: 'Đang hậu kỳ', n: editing, color: 'var(--blue)', status: 'editing' },
-    { label: 'Sắp / đang trễ', n: overdue.length + soon.length, color: 'var(--red)', status: null },
-    { label: 'Đang upload', n: uploadingCount, color: 'var(--teal)', status: null },
-  ];
-  const statsEl = document.getElementById('dash-stats');
-  if (statsEl) statsEl.innerHTML = stats.map(s =>
-    `<div class="dash-stat"${s.status ? ` onclick="dashGoStatus('${s.status}')" style="cursor:pointer"` : ''}>
-       <div class="dash-stat-n" style="color:${s.color}">${s.n}</div>
-       <div class="dash-stat-l">${s.label}</div>
-     </div>`
-  ).join('');
+  const sub = document.getElementById('dash-sub');
+  if (sub) {
+    if (overdueCount > 0) {
+      sub.innerHTML = `Hôm nay có <b style="color:var(--red)">${overdueCount} album trễ hạn</b> — xử lý sớm để khách vui nhé!`;
+    } else {
+      sub.textContent = 'Nhìn vào đây để biết ngay việc cần làm hôm nay.';
+    }
+  }
 
-  // Deadline list (trễ trước, sắp trễ sau)
+  // Icon chips cho từng stat tile
+  const STAT_ICONS = [
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2M9 2h6"/></svg>`,
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><polyline points="20 6 9 17 4 12"/></svg>`,
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>`,
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>`,
+  ];
+  const STAT_CHIP_BG  = ['var(--amber-soft)', 'var(--green-soft)', 'var(--blue-soft)', 'var(--red-soft,rgba(192,73,46,.12))', 'var(--panel-3)'];
+  const STAT_CHIP_CLR = ['var(--amber)', 'var(--green)', 'var(--blue)', 'var(--red)', 'var(--muted)'];
+
+  const stats = [
+    { label: 'Chờ khách chọn',     n: choosing,                    color: 'var(--amber)', status: 'choosing' },
+    { label: 'Chốt, chờ hậu kỳ',   n: doneNotEdited,               color: 'var(--green)', status: 'done' },
+    { label: 'Đang hậu kỳ',        n: editing,                     color: 'var(--blue)',  status: 'editing' },
+    { label: 'Sắp / đang trễ',     n: overdueCount + soon.length,  color: 'var(--red)',   status: null, warn: overdueCount > 0 },
+    { label: 'Đang upload',        n: uploadingCount,              color: 'var(--muted)', status: null },
+  ];
+
+  const statsEl = document.getElementById('dash-stats');
+  if (statsEl) statsEl.innerHTML = stats.map((s, i) => {
+    const warnStyle = s.warn ? ' style="background:var(--red-soft,#FBEAE3);border-color:var(--red)"' : '';
+    const clickAttr = s.status ? ` onclick="dashGoStatus('${s.status}')"` : '';
+    return `<div class="dash-stat"${clickAttr}${warnStyle}>
+      <div class="dash-stat-chip" style="background:${STAT_CHIP_BG[i]};color:${STAT_CHIP_CLR[i]}">${STAT_ICONS[i]}</div>
+      <div class="dash-stat-n" style="color:${s.color}">${s.n}</div>
+      <div class="dash-stat-l">${s.label}</div>
+    </div>`;
+  }).join('');
+
+  // Deadline list — với avatar initials màu theo urgency
   const dlEl = document.getElementById('dash-deadline');
   const dlItems = [...overdue, ...soon].slice(0, 8);
   if (dlEl) dlEl.innerHTML = dlItems.length ? dlItems.map(({ a, d }) => {
-    const cls = d < 0 ? 'card-dl-over' : 'card-dl-soon';
-    const txt = d < 0 ? `Trễ ${-d} ngày` : d === 0 ? 'Hôm nay' : `Còn ${d} ngày`;
+    const isOver = d < 0;
+    const txt = isOver ? `Trễ ${-d} ngày` : d === 0 ? 'Hôm nay' : `Còn ${d} ngày`;
+    const pillClr  = isOver ? '#C0492E' : '#9A6B1E';
+    const pillBg   = isOver ? '#FBEAE3' : '#F7EFD8';
+    const avBg     = isOver ? '#F6D8CB' : '#F7EFD8';
+    const avClr    = isOver ? '#B0492E' : '#9A6B1E';
+    const initials = (a.name || 'A').trim().split(/\s+/).map(w => w[0].toUpperCase()).slice(0, 2).join('');
     return `<div class="dash-row" onclick="openAlbum('${a.id}')">
-      <span class="dash-row-name">${a.name || 'Album'}</span>
-      ${albumStatusPill(a)}
-      <span class="${cls}" style="margin-top:0;white-space:nowrap">${txt}</span>
+      <span class="dash-av" style="background:${avBg};color:${avClr}">${initials}</span>
+      <span class="dash-row-name" style="flex:1">${a.name || 'Album'}<br><small style="font-size:11.5px;color:var(--muted-2);font-weight:500">${albumStatusLabel(a)}</small></span>
+      <span class="dash-dl-pill" style="color:${pillClr};background:${pillBg}">${txt}</span>
     </div>`;
   }).join('') : '<div class="dash-empty">Không có album nào sắp trễ 🎉</div>';
 
-  // Recent activity
+  // Recent activity — với progress bar
   const recent = [...active].sort((a, b) => (b.lastActivity || b.createdAt || 0) - (a.lastActivity || a.createdAt || 0)).slice(0, 6);
   const recEl = document.getElementById('dash-recent');
   if (recEl) recEl.innerHTML = recent.length ? recent.map(a => {
     const sel = albumSelCount(a), total = (a.photos || []).length;
+    const pct = total > 0 ? Math.round(sel / total * 100) : 0;
     return `<div class="dash-row" onclick="openAlbum('${a.id}')">
-      <span class="dash-row-name">${a.name || 'Album'}</span>
+      <span class="dash-row-name" style="flex:1">
+        ${a.name || 'Album'}
+        <div class="dash-prog-wrap"><div class="dash-prog-bar"><div class="dash-prog-fill" style="width:${pct}%"></div></div><span class="dash-prog-cnt">${sel}/${total} ảnh</span></div>
+      </span>
       ${albumStatusPill(a)}
-      <span style="font-size:12px;color:var(--muted);white-space:nowrap">${sel}/${total} ảnh</span>
     </div>`;
   }).join('') : '<div class="dash-empty">Chưa có album nào.</div>';
 }
@@ -1470,6 +1505,25 @@ function dashGoStatus(st) {
   setHash('albums');
   renderAlbumsList();
 }
+
+function onLogoFileChange(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const dataUrl = e.target.result;
+    localStorage.setItem('lamMienLogo', dataUrl);
+    document.querySelectorAll('img.logo').forEach(img => { img.src = dataUrl; });
+  };
+  reader.readAsDataURL(file);
+  input.value = '';
+}
+
+// Restore saved logo on load
+(function initSavedLogo() {
+  const saved = localStorage.getItem('lamMienLogo');
+  if (saved) document.querySelectorAll('img.logo').forEach(img => { img.src = saved; });
+})();
 
 /* ─────────────────────────────────────────────
    11c. CÀI ĐẶT PAGE (render động)
