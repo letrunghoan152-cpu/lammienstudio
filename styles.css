@@ -36,36 +36,40 @@
 }
 :root[data-theme="light"] {
   color-scheme: light;
-  --bg: #f5f6f4;
-  --bg-2: #ffffff;
-  --panel: #ffffff;
-  --panel-2: #f4f5f2;
-  --panel-3: #eaece7;
-  --line: #e3e6e0;
-  --line-soft: #eef0ec;
-  --text: #1f2418;
-  --muted: #5f6857;
-  --muted-2: #8b9282;
-  --brand: #6d8150;          /* olive đậm hơn cho nền sáng */
-  --brand-600: #5c6e43;      /* hover tối hơn */
-  --brand-700: #4d5c38;
-  --brand-200: #4d5c38;
-  --brand-soft: rgba(109, 128, 80, .14);
+  /* ── Soft Sage palette ── */
+  --bg: #FBFCF9;
+  --bg-2: #F3F5EF;
+  --panel: #FFFFFF;
+  --panel-2: #F3F5EF;
+  --panel-3: #EAEEE1;
+  --line: #EAEEE1;
+  --line-soft: #F2F4EC;
+  --text: #25291F;
+  --muted: #79806C;
+  --muted-2: #9AA08D;
+  --brand: #5C8A3A;
+  --brand-600: #4C7A2E;
+  --brand-700: #3D6023;
+  --brand-200: #43622C;
+  --brand-soft: #E1EAD5;
   --cream: #ead9b5;
-  --green: #5e7d3e;
-  --green-soft: rgba(94, 125, 62, .14);
-  --blue: #3f7e93;
-  --blue-soft: rgba(63, 126, 147, .12);
-  --amber: #a9802f;
-  --amber-soft: rgba(169, 128, 47, .14);
-  --teal: #3f8c72;
+  --green: #5C8A3A;
+  --green-soft: #EAF0E0;
+  --blue: #3F6E8C;
+  --blue-soft: #E7F0F4;
+  --amber: #9A6B1E;
+  --amber-soft: #F7EFD8;
+  --teal: #3F8C72;
   --teal-soft: rgba(63, 140, 114, .12);
-  --pink: #b5703f;
-  --red: #c0503f;
-  --slate: #6e7860;
-  --slate-soft: rgba(110, 120, 96, .12);
-  --shadow: 0 16px 44px rgba(80, 70, 40, .16);
-  --shadow-sm: 0 6px 16px rgba(80, 70, 40, .1);
+  --pink: #B5703F;
+  --red: #C0492E;
+  --red-soft: #FBEAE3;
+  --slate: #79806C;
+  --slate-soft: #EFEFE7;
+  --shadow: 0 1px 3px rgba(40,50,30,.05);
+  --shadow-sm: 0 4px 12px rgba(40,50,30,.09);
+  --radius: 14px;
+  --radius-lg: 20px;
 }
 
 * { box-sizing: border-box; }
@@ -172,10 +176,11 @@ select {
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ============ App shell ============ */
-.app-shell { display: grid; grid-template-columns: 248px 1fr; min-height: 100vh; }
+.app-shell { display: grid; grid-template-columns: 252px 1fr; min-height: 100vh; }
 .sidebar {
   position: sticky; top: 0; align-self: start; height: 100vh; padding: 22px 16px;
   background: var(--bg-2); border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px;
+  width: 252px;
 }
 img.logo { object-fit: contain; background: #efece5; padding: 2px; }
 .sb-brand { display: flex; align-items: center; gap: 11px; padding: 4px 8px 18px; }
@@ -256,8 +261,8 @@ img.logo { object-fit: contain; background: #efece5; padding: 2px; }
 .prog-cards .prog-row .lnk { width: 100%; height: 44px; border-radius: 10px; }
 .prog-cards .prog-row .lnk::after { content: "Copy link gửi khách"; font-size: 13px; font-weight: 600; margin-left: 8px; }
 
-.acard { background: var(--panel-2); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; display: flex; flex-direction: column; transition: border-color .18s, transform .18s; }
-.acard:hover { border-color: #353b47; transform: translateY(-2px); }
+.acard { background: var(--panel-2); border: 1px solid var(--line); border-radius: 18px; overflow: hidden; display: flex; flex-direction: column; transition: border-color .18s, box-shadow .18s, transform .18s; }
+.acard:hover { border-color: var(--muted-2); transform: translateY(-3px); box-shadow: 0 8px 24px rgba(40,50,30,.12); }
 .acard-cover { position: relative; padding-top: 62.5%; background: var(--panel-2); overflow: hidden; cursor: pointer; }
 .acard-cover img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .acard-cover .ph { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted-2); font-size: 34px; }
@@ -629,7 +634,7 @@ img.logo { object-fit: contain; background: #efece5; padding: 2px; }
 /* ============ Responsive ============ */
 @media (max-width: 860px) {
   .app-shell { grid-template-columns: 1fr; }
-  .sidebar { position: fixed; left: 0; top: 0; z-index: 50; transform: translateX(-100%); transition: transform .25s; width: 248px; }
+  .sidebar { position: fixed; left: 0; top: 0; z-index: 50; transform: translateX(-100%); transition: transform .25s; width: 252px; }
   .sidebar.open { transform: translateX(0); }
   .app-main { padding-top: calc(74px + env(safe-area-inset-top, 0px)); padding-left: 16px; padding-right: 16px; }
   .mobile-bar { display: flex !important; padding-top: calc(12px + env(safe-area-inset-top, 0px)); }
@@ -1017,8 +1022,8 @@ img.logo { object-fit: contain; background: #efece5; padding: 2px; }
 .dash-empty { font-size: 13px; color: var(--muted-2); text-align: center; padding: 20px 0; }
 
 /* ── Album card (grid view) — markup uses .album-card/.card-* ───────── */
-.album-card { background: var(--panel-2); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; display: flex; flex-direction: column; transition: border-color .18s, transform .18s; }
-.album-card:hover { border-color: #353b47; transform: translateY(-2px); }
+.album-card { background: var(--panel-2); border: 1px solid var(--line); border-radius: 18px; overflow: hidden; display: flex; flex-direction: column; transition: border-color .18s, box-shadow .18s, transform .18s; }
+.album-card:hover { border-color: var(--muted-2); transform: translateY(-3px); box-shadow: 0 8px 24px rgba(40,50,30,.12); }
 .card-cover { position: relative; padding-top: 62.5%; background-color: var(--panel-3); background-size: cover; background-position: 50% 50%; background-repeat: no-repeat; cursor: pointer; }
 .card-overlay { position: absolute; top: 8px; right: 8px; display: flex; gap: 6px; opacity: 0; transition: opacity .15s; }
 .album-card:hover .card-overlay { opacity: 1; }
@@ -1033,7 +1038,7 @@ img.logo { object-fit: contain; background: #efece5; padding: 2px; }
 
 /* ── Album detail photo grid — markup uses .photo-thumb/.photo-list-row ─ */
 .photo-thumb { position: relative; aspect-ratio: 1/1; border-radius: 10px; overflow: hidden; background: var(--panel-2); border: 1px solid var(--line); cursor: pointer; transition: transform .12s, border-color .15s; }
-.photo-thumb:hover { transform: translateY(-2px); border-color: #353b47; }
+.photo-thumb:hover { transform: translateY(-2px); border-color: var(--muted-2); }
 .photo-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .photo-thumb.selected { border-color: var(--green); }
 .photo-thumb.picked { border-color: var(--brand-200); }
@@ -1042,7 +1047,7 @@ img.logo { object-fit: contain; background: #efece5; padding: 2px; }
 .photo-thumb .pick-cb { position: absolute; bottom: 6px; left: 6px; width: 18px; height: 18px; }
 
 .photo-list-row { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 10px; background: var(--panel-2); border: 1px solid var(--line); cursor: pointer; }
-.photo-list-row:hover { border-color: #353b47; }
+.photo-list-row:hover { border-color: var(--muted-2); }
 .photo-list-row.picked { border-color: var(--brand-200); }
 .photo-list-row img { width: 46px; height: 46px; object-fit: cover; border-radius: 8px; flex: none; }
 .photo-list-row .photo-name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13px; }
@@ -1051,7 +1056,7 @@ img.logo { object-fit: contain; background: #efece5; padding: 2px; }
 
 /* ── Client (customer) photo grid — markup uses .photo-item/.photo-img-wrap ─ */
 .photo-item { background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; transition: border-color .15s, transform .12s; }
-.photo-item:hover { border-color: #353b47; transform: translateY(-2px); }
+.photo-item:hover { border-color: var(--muted-2); transform: translateY(-2px); }
 .photo-img-wrap { position: relative; aspect-ratio: 1/1; overflow: hidden; cursor: zoom-in; background: var(--panel-3); }
 .photo-img-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .photo-img-wrap .note-dot { position: absolute; top: 6px; right: 6px; font-size: 14px; }
@@ -1067,3 +1072,68 @@ img.logo { object-fit: contain; background: #efece5; padding: 2px; }
 .photo-grid.list .photo-img-wrap { width: 64px; height: 64px; aspect-ratio: auto; flex: none; border-radius: 8px; }
 .photo-grid.list .photo-actions { flex: 1; }
 .photo-grid.masonry .photo-img-wrap { aspect-ratio: auto; }
+
+/* =============================================
+   PERFORMANCE: content-visibility for large photo grids
+   ============================================= */
+.dthumb { content-visibility: auto; contain-intrinsic-size: 0 120px; }
+.photo-thumb { content-visibility: auto; contain-intrinsic-size: 0 120px; }
+.pcard { content-visibility: auto; contain-intrinsic-size: 0 160px; }
+
+/* Skeleton shimmer for admin detail grid while photos load */
+.dthumb.skel, .photo-thumb.skel {
+  background: linear-gradient(100deg, var(--panel) 28%, var(--panel-3) 50%, var(--panel) 72%);
+  background-size: 200% 100%;
+  animation: shimmer 1.3s ease-in-out infinite;
+  border-color: transparent;
+}
+.dthumb.skel img, .photo-thumb.skel img { display: none; }
+
+/* =============================================
+   SOFT SAGE LIGHT THEME — component overrides
+   ============================================= */
+
+/* Sidebar nav: inactive → sage-tinted, active → E1EAD5 / 43622C */
+:root[data-theme="light"] .sb-nav a { color: #5C6450; }
+:root[data-theme="light"] .sb-nav a:hover { background: #EAF0E0; color: #25291F; }
+:root[data-theme="light"] .sb-nav a.active { background: #E1EAD5; color: #43622C; font-weight: 700; }
+
+/* acard-title / card-name hover accent */
+:root[data-theme="light"] .acard-title:hover { color: #43622C; }
+:root[data-theme="light"] .card-name:hover { color: #43622C; }
+
+/* Overdue deadline badge — update hardcoded dark color */
+:root[data-theme="light"] .dl-over { color: #C0492E; background: #FBEAE3; }
+
+/* Login screen gradient */
+:root[data-theme="light"] .screen {
+  background:
+    radial-gradient(900px 500px at 15% -10%, rgba(92,138,58,.10), transparent 55%),
+    radial-gradient(700px 500px at 100% 110%, rgba(63,110,140,.07), transparent 55%),
+    var(--bg);
+}
+
+/* Dashboard stat tile: slightly more prominent on light bg */
+:root[data-theme="light"] .dash-stat { background: var(--panel); border-color: var(--line); }
+:root[data-theme="light"] .dash-stat[onclick]:hover { border-color: var(--brand); transform: translateY(-2px); box-shadow: 0 4px 14px rgba(40,50,30,.08); }
+
+/* Table/list header strip */
+:root[data-theme="light"] .alv-head { background: #FAFBF8; }
+:root[data-theme="light"] .prog-head { background: #FAFBF8; }
+
+/* Status pills: ensure solid bg on light surface */
+:root[data-theme="light"] .st-draft { color: #79806C; background: #EFEFE7; }
+:root[data-theme="light"] .st-waiting { color: #3F6E8C; background: #E7F0F4; }
+:root[data-theme="light"] .st-choosing { color: #9A6B1E; background: #F7EFD8; }
+:root[data-theme="light"] .st-done { color: #5C8A3A; background: #EAF0E0; }
+:root[data-theme="light"] .st-editing { color: #43622C; background: #E1EAD5; }
+:root[data-theme="light"] .st-ready { color: #3F8C72; background: rgba(63,140,114,.12); }
+:root[data-theme="light"] .st-delivered { color: #5C8A3A; background: #EAF0E0; }
+
+/* Deadline badges on light */
+:root[data-theme="light"] .dl-soon { color: #B0762A; background: #FDF2E3; }
+:root[data-theme="light"] .dl-ok { color: #5C8A3A; background: #EAF0E0; }
+
+/* Scrollbar on light bg */
+:root[data-theme="light"] ::-webkit-scrollbar-thumb { background: #D5D9CC; }
+:root[data-theme="light"] ::-webkit-scrollbar-thumb:hover { background: #B8C2AE; }
