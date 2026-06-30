@@ -56,6 +56,9 @@ const S = {
   lbContext: 'client',         // 'client' | 'detail'
   // UI
   theme: 'light',
+  // Settings — date range filter
+  filterDateFrom: '',          // 'YYYY-MM-DD' or ''
+  filterDateTo:   '',          // 'YYYY-MM-DD' or ''
 };
 
 /* ─────────────────────────────────────────────
@@ -64,6 +67,8 @@ const S = {
 const STORAGE_KEY    = 'lamMienApiAuth';
 const ALBUMS_KEY     = 'lamMienAlbums';
 const THEME_KEY      = 'lamMienTheme';
+const FILTER_DATE_FROM_KEY = 'lmFilterDateFrom';
+const FILTER_DATE_TO_KEY   = 'lmFilterDateTo';
 const SESSION_KEY    = 'lmActiveUploads';
 const UPLOAD_STUCK_MS = 600_000; // 10 min before clearing stuck flag
 const SYNC_INTERVAL   = 30_000;  // 30s auto-refresh
@@ -163,7 +168,7 @@ function lsSet(key, val) {
   try {
     localStorage.setItem(key, JSON.stringify(val));
   } catch (e) {
-    // quota exceeded — try compacting albums (strip heavy fields)
+    // Quota exceeded — thử compact: cắt photos > 500 mỗi album
     if (key === ALBUMS_KEY) {
       try {
         const compact = (val || []).map(a => {
@@ -172,7 +177,15 @@ function lsSet(key, val) {
           return c;
         });
         localStorage.setItem(key, JSON.stringify(compact));
-      } catch { /* give up silently */ }
+      } catch {
+        // B-6: compact cũng fail → bộ nhớ vẫn đầy, cảnh báo người dùng
+        // dùng setTimeout để không block luồng hiện tại
+        setTimeout(() => toast(
+          '⚠ Bộ nhớ trình duyệt đầy — dữ liệu album có thể không được lưu cục bộ. ' +
+          'Hãy dọn thùng rác hoặc mở tab mới để tiếp tục làm việc.',
+          6000
+        ), 0);
+      }
     }
   }
 }
@@ -185,9 +198,10 @@ function parseShootDate(name) {
   return new Date(y, parseInt(m[2]) - 1, parseInt(m[1]));
 }
 
-/** Format deadline countdown */
-function deadlineBadge(dl) {
+/** Format deadline countdown — trả null nếu album đã hoàn thành */
+function deadlineBadge(dl, status) {
   if (!dl) return null;
+  if (status === 'done' || status === 'delivered') return null;
   const diff = Math.ceil((new Date(dl) - Date.now()) / 86400000);
   if (diff < 0) return { text: `Trễ ${-diff} ngày`, cls: 'dl-over' };
   if (diff === 0) return { text: 'Hôm nay!', cls: 'dl-today' };
@@ -419,19 +433,33 @@ const SyncManager = {
             Date.now() - (sv.lastActivity || 0) > UPLOAD_STUCK_MS) {
           sv.uploading = false;
         }
-        // Use server timestamp for merge arbitration
-        if (lo && (lo.lastActivity || 0) > (sv._serverUpdatedAt || 0)) {
+        // B-2: last-write-wins với tolerance 8s để bù clock skew client/server.
+        // forcePush được gọi ngay sau mỗi thay đổi, nên khi sync 30s chạy
+        // thì server đã có data mới — chỉ push lại nếu local THỰC SỰ mới hơn.
+        const CLOCK_SKEW_MS = 8000;
+        if (lo && (lo.lastActivity || 0) > (sv._serverUpdatedAt || 0) + CLOCK_SKEW_MS) {
           apiPushAlbum(lo).catch(() => {});
           return lo;
         }
         return sv;
       });
 
-      // Preserve local-only albums (not on server yet) and push them up.
+      // Preserve local-only active albums (not on server yet) and push them up.
       S.albums.forEach(lo => {
         if (!merged.find(m => m.id === lo.id)) {
           merged.push(lo);
-          apiPushAlbum(lo).catch(() => {}); // upload albums that never made it to server
+          apiPushAlbum(lo).catch(() => {});
+        }
+      });
+
+      // B-8: Preserve local-only TRASHED albums not yet on server.
+      // Trashed albums that WERE on server will already be in merged (from serverList.map).
+      // Trashed albums permanently deleted from server will NOT be in serverList
+      // → they correctly disappear from local trash after this sync (desired behavior).
+      // But albums trashed locally before first push need to be kept in local trash.
+      S.trashedAlbums.forEach(lo => {
+        if (!merged.find(m => m.id === lo.id)) {
+          merged.push(lo); // keep local-only trash entry, do not push to server
         }
       });
 
@@ -708,6 +736,7 @@ async function driveUploadFileWithRetry(file, folderId, token, onProgress, maxRe
 const UploadManager = {
   MAX_GLOBAL: 6,        // max concurrent file uploads across all albums
   _running: 0,
+  _runningByAlbum: new Map(), // B-10: per-album running count để _checkAlbumComplete chính xác
   _queue: [],           // [{ albumId, galleryId, galleryName, folderId, file, resolve, reject }]
   _sessions: new Map(), // albumId → { albumId, albumName, galleries: { galleryId → {done,total,failed,name} } }
   _bc: null,
@@ -817,10 +846,12 @@ const UploadManager = {
     while (this._running < this.MAX_GLOBAL && this._queue.length) {
       const task = this._queue.shift();
       this._running++;
+      // B-10: track per-album để _checkAlbumComplete không bị false positive
+      this._runningByAlbum.set(task.albumId, (this._runningByAlbum.get(task.albumId) || 0) + 1);
       this._uploadOne(task).finally(() => {
         this._running--;
+        this._runningByAlbum.set(task.albumId, Math.max(0, (this._runningByAlbum.get(task.albumId) || 1) - 1));
         this._pump();
-        // Check if all done for this album
         this._checkAlbumComplete(task.albumId);
       });
     }
@@ -884,15 +915,13 @@ const UploadManager = {
   },
 
   _checkAlbumComplete(albumId) {
-    // Is any queue item still pending for this album?
+    // B-10: dùng per-album counter thay vì global _running
+    // Tránh false positive khi album khác vẫn đang upload
     const stillPending = this._queue.some(t => t.albumId === albumId);
-    if (stillPending || this._running > 0) {
-      // Check if any running tasks are for this album (approximation: if total === done across galleries)
-      const session = this._sessions.get(albumId);
-      if (!session) return;
-      const galleries = Object.values(session.galleries);
-      const allDone = galleries.every(g => g.done >= g.total);
-      if (!allDone) return;
+    const stillRunning = (this._runningByAlbum.get(albumId) || 0) > 0;
+    if (stillPending || stillRunning) {
+      // Có task pending/running cho album này → chưa xong
+      return;
     }
     // Double-check queue
     if (this._queue.some(t => t.albumId === albumId)) return;
@@ -927,12 +956,12 @@ const UploadManager = {
     this._speed.delete(albumId);
     renderUploadDashboard();
 
-    // Clean up session after a delay (success card lingers ~6s)
+    // Clean up session after a delay (success card lingers 30s)
     setTimeout(() => {
       this._sessions.delete(albumId);
       this._broadcastProgress();
       renderUploadDashboard();
-    }, 6000);
+    }, 30000);
     renderAlbumsList();
   },
 
@@ -982,6 +1011,12 @@ function fmtBytes(n) {
 }
 /** Upload speed, e.g. 3.2 MB/s */
 function fmtSpeed(bps) { return (!bps || bps < 1) ? '—' : fmtBytes(bps) + '/s'; }
+/** Tên file ảnh hiển thị: bỏ đuôi mở rộng, cắt nếu quá dài */
+function photoDispName(p, fallbackIdx) {
+  const noExt = (p.name || '').replace(/\.[^/.]+$/, '').trim();
+  if (!noExt) return String(fallbackIdx + 1);
+  return noExt.length > 20 ? noExt.slice(0, 19) + '…' : noExt;
+}
 /** ETA in Vietnamese, e.g. "2 phút 5s" */
 function fmtEta(sec) {
   if (!isFinite(sec) || sec <= 0) return '—';
@@ -993,36 +1028,63 @@ function fmtEta(sec) {
   return `${h} giờ ${m % 60} phút`;
 }
 
-/** Render the fixed bottom-right upload status widget (speed / count / ETA / done) */
+/** Render the fixed bottom-right upload status widget.
+ *  Sử dụng DOM reconciliation thay vì innerHTML để tránh nhấp nháy.
+ *  Thanh tiến độ được update in-place → CSS transition width hoạt động mượt. */
 function renderUploadDashboard() {
   const stack = document.getElementById('upload-stack');
   if (!stack) return;
   const sessions = [...UploadManager._sessions.values()];
-  if (!sessions.length) { stack.innerHTML = ''; return; }
   const now = Date.now();
 
-  stack.innerHTML = sessions.map(s => {
+  // Xoá card của session đã biến mất
+  stack.querySelectorAll('.uf-item[data-album]').forEach(card => {
+    if (!sessions.find(s => s.albumId === card.dataset.album)) card.remove();
+  });
+
+  if (!sessions.length) return;
+
+  sessions.forEach(s => {
     const galleries = Object.values(s.galleries);
     const totalDone = galleries.reduce((n, g) => n + g.done, 0);
     const totalTotal = galleries.reduce((n, g) => n + g.total, 0);
+    let card = stack.querySelector(`.uf-item[data-album="${s.albumId}"]`);
 
     // ── Completed card (success / partial-fail) ──
     if (s.completed) {
       const failed = s.failedCount || 0;
       const ok = s.doneCount != null ? s.doneCount : totalDone;
-      const cls = failed ? 'err' : 'ok';
-      const name = failed ? `⚠ ${s.albumName}` : `✓ ${s.albumName}`;
-      const msg = failed
+
+      // Nếu card cũ là in-progress (không có .uf-msg), rebuild innerHTML
+      // để tránh querySelector('.uf-msg') trả null và crash silent
+      const needsRebuild = !card || !card.querySelector('.uf-msg');
+      if (needsRebuild) {
+        if (!card) {
+          card = document.createElement('div');
+          card.dataset.album = s.albumId;
+          stack.appendChild(card);
+        }
+        card.innerHTML = `
+          <div class="uf-head">
+            <span class="uf-name"></span>
+            <button class="uf-x" title="Đóng">×</button>
+          </div>
+          <div class="uf-bar"><div class="uf-fill" style="width:100%"></div></div>
+          <div class="uf-stats"><span class="uf-msg"></span><span>100%</span></div>`;
+        card.querySelector('.uf-x').onclick = () => {
+          UploadManager._sessions.delete(s.albumId);
+          UploadManager._speed.delete(s.albumId);
+          card.remove();
+        };
+      }
+
+      // Cập nhật class và text (idempotent)
+      card.className = `uf-item ${failed ? 'err' : 'ok'}`;
+      card.querySelector('.uf-name').textContent = (failed ? '⚠ ' : '✓ ') + s.albumName;
+      card.querySelector('.uf-msg').textContent = failed
         ? `${ok} ảnh thành công · ${failed} lỗi`
-        : `Tải lên thành công — ${ok} ảnh`;
-      return `<div class="uf-item ${cls}" data-album="${s.albumId}">
-        <div class="uf-head">
-          <span class="uf-name">${name}</span>
-          <button class="uf-x" data-close="${s.albumId}" title="Đóng">×</button>
-        </div>
-        <div class="uf-bar"><div class="uf-fill" style="width:100%"></div></div>
-        <div class="uf-stats"><span>${msg}</span><span>100%</span></div>
-      </div>`;
+        : `Đã tải xong: ${ok} ảnh`;
+      return;
     }
 
     // ── In-progress card ──
@@ -1047,30 +1109,35 @@ function renderUploadDashboard() {
     const remaining = Math.max(0, bytesTotal - bytesDone);
     const eta = bps > 0 ? remaining / bps : Infinity;
 
-    return `<div class="uf-item" data-album="${s.albumId}">
-      <div class="uf-head">
-        <span class="uf-name">⬆ ${s.albumName}</span>
-        <span class="uf-name-pct">${pct}%</span>
-      </div>
-      <div class="uf-bar"><div class="uf-fill" style="width:${pct}%"></div></div>
-      <div class="uf-stats">
-        <span>📷 ${totalDone}/${totalTotal} ảnh</span>
-        <span>⚡ ${fmtSpeed(bps)}</span>
-      </div>
-      <div class="uf-stats">
-        <span>${fmtBytes(bytesDone)} / ${fmtBytes(bytesTotal)}</span>
-        <span>⏳ còn ${fmtEta(eta)}</span>
-      </div>
-    </div>`;
-  }).join('');
+    if (!card) {
+      // Tạo card in-progress lần đầu
+      card = document.createElement('div');
+      card.className = 'uf-item';
+      card.dataset.album = s.albumId;
+      card.innerHTML = `
+        <div class="uf-head">
+          <span class="uf-name">⬆ ${s.albumName}</span>
+          <span class="uf-name-pct"></span>
+        </div>
+        <div class="uf-bar"><div class="uf-fill"></div></div>
+        <div class="uf-stats">
+          <span class="uf-count"></span>
+          <span class="uf-speed"></span>
+        </div>
+        <div class="uf-stats">
+          <span class="uf-bytes"></span>
+          <span class="uf-eta"></span>
+        </div>`;
+      stack.appendChild(card);
+    }
 
-  // Dismiss a completed card immediately
-  stack.querySelectorAll('.uf-x[data-close]').forEach(btn => {
-    btn.onclick = () => {
-      UploadManager._sessions.delete(btn.dataset.close);
-      UploadManager._speed.delete(btn.dataset.close);
-      renderUploadDashboard();
-    };
+    // Update in-place — không tạo lại DOM, progress bar transition hoạt động mượt
+    card.querySelector('.uf-name-pct').textContent = pct + '%';
+    card.querySelector('.uf-fill').style.width = pct + '%';
+    card.querySelector('.uf-count').textContent = `📷 ${totalDone}/${totalTotal} ảnh`;
+    card.querySelector('.uf-speed').textContent = `⚡ ${fmtSpeed(bps)}`;
+    card.querySelector('.uf-bytes').textContent = `${fmtBytes(bytesDone)} / ${fmtBytes(bytesTotal)}`;
+    card.querySelector('.uf-eta').textContent = `⏳ còn ${fmtEta(eta)}`;
   });
 }
 
@@ -1139,6 +1206,36 @@ function albumStatusLabel(album) {
   return STATUS_LABELS[album.status || 'new'] || 'Mới tạo';
 }
 
+function showStatusDropdown(anchor, album) {
+  document.querySelectorAll('.status-dd').forEach(el => el.remove());
+  const dd = document.createElement('div');
+  dd.className = 'status-dd';
+  dd.innerHTML = STATUS_ORDER.map(st => `
+    <button class="status-dd-item${(album.status || 'new') === st ? ' active' : ''}" data-st="${st}">
+      <span class="status-dd-dot" style="background:${STATUS_COLORS[st]}"></span>${STATUS_LABELS[st]}
+    </button>`).join('');
+  const rect = anchor.getBoundingClientRect();
+  Object.assign(dd.style, {
+    position: 'fixed',
+    top: (rect.bottom + 4) + 'px',
+    left: rect.left + 'px',
+    zIndex: '200',
+  });
+  document.body.appendChild(dd);
+  dd.querySelectorAll('[data-st]').forEach(item => {
+    item.onclick = e => {
+      e.stopPropagation();
+      album.status = item.dataset.st;
+      album.lastActivity = Date.now();
+      saveAlbumsLocal();
+      dd.remove();
+      renderAlbumsList();
+      SyncManager.forcePush(album).catch(() => {});
+    };
+  });
+  setTimeout(() => document.addEventListener('click', () => dd.remove(), { once: true }), 0);
+}
+
 function albumCoverUrl(album) {
   const photos = album.photos || [];
   let p = album.cover
@@ -1156,6 +1253,13 @@ const STATUS_COLORS = {
 /** Number of selected photos in an album. */
 function albumSelCount(a) {
   return (a.photos || []).filter(p => p.selected || p.review === 'selected').length;
+}
+
+/** Selection progress % — dùng maxCount làm mẫu số nếu có, fallback sang total. */
+function albumSelPct(a) {
+  const sel   = albumSelCount(a);
+  const denom = a.maxCount || (a.photos || []).length;
+  return denom > 0 ? Math.min(100, Math.round(sel / denom * 100)) : 0;
 }
 
 /** Whether an album is currently uploading (used as a "never hide" guard). */
@@ -1209,6 +1313,11 @@ function filteredAlbums() {
   let list = S.albums.filter(a => {
     if (a.trashed) return false;
     if (albumIsUploading(a)) return true; // guardrail — keep uploading albums visible
+    if (S.filterDateFrom || S.filterDateTo) {
+      const ts = a.createdAt || a.lastActivity || 0;
+      if (S.filterDateFrom && ts < new Date(S.filterDateFrom).getTime()) return false;
+      if (S.filterDateTo   && ts > new Date(S.filterDateTo).getTime() + 86399999) return false;
+    }
     if (S.filterStatus && (a.status || 'new') !== S.filterStatus) return false;
     if (month) {
       const d = parseShootDate(a.name);
@@ -1239,27 +1348,42 @@ function renderAlbumCard(album) {
   const cover = albumCoverUrl(album);
   const sel = (album.photos || []).filter(p => p.selected || p.review === 'selected').length;
   const total = (album.photos || []).length;
-  const dl = deadlineBadge(album.deadline);
+  const dl = deadlineBadge(album.deadline, album.status);
   const uploading = album.uploading || S.activeUploads.has(album.id);
+  const galleries = album.galleries || [];
+  const visibleGals = galleries.slice(0, 3);
+  const extraGals = galleries.length > 3 ? galleries.length - 3 : 0;
+  const dateStr = album.createdAt ? fmtDate(album.createdAt) : '';
+  const statusKey = album.status || 'new';
+  const canEdit = can('album', 'edit');
 
   return `
     <div class="album-card" data-id="${album.id}">
-      <div class="card-cover" style="${cover ? `background-image:url('${cover}')` : 'background:#f0f0f0'}">
+      <div class="card-cover" style="${cover ? `background-image:url('${cover}')` : 'background:var(--panel-3)'}">
         ${uploading ? '<div class="card-uploading"><div class="spin"></div>Đang upload…</div>' : ''}
-        <div class="card-overlay">
-          ${can('album','edit') ? '<button class="card-btn" data-action="edit" title="Sửa">✏</button>' : ''}
-          <button class="card-btn" data-action="share" title="Link khách">🔗</button>
-          ${can('album','trash') ? '<button class="card-btn" data-action="trash" title="Xoá">🗑</button>' : ''}
-        </div>
+        <button class="card-share-pin" data-action="share" title="Link gửi khách">🔗</button>
+        ${canEdit || can('album', 'trash') ? `
+        <div class="card-menu-wrap">
+          <button class="card-menu-btn" data-action="menu" title="Tùy chọn">⋯</button>
+          <div class="card-dropdown">
+            ${canEdit ? '<button class="card-dd-item" data-action="edit">✏ Chỉnh sửa</button>' : ''}
+            ${canEdit ? '<button class="card-dd-item" data-action="cover">🖼 Đổi ảnh bìa</button>' : ''}
+            ${can('album', 'trash') ? '<button class="card-dd-item card-dd-danger" data-action="trash">🗑 Xoá album</button>' : ''}
+          </div>
+        </div>` : ''}
       </div>
       <div class="card-body">
         <div class="card-name">${album.name || 'Album không tên'}</div>
         <div class="card-meta">
-          ${albumStatusPill(album)}
+          ${canEdit
+            ? `<span class="status-pill s-${statusKey}" data-action="status" title="Đổi trạng thái"><span class="dot"></span>${STATUS_LABELS[statusKey] || statusKey}</span>`
+            : albumStatusPill(album)}
           <span>${sel}/${total} ảnh</span>
           ${dl ? `<span class="dl-badge ${dl.cls}">${dl.text}</span>` : ''}
+          ${dateStr ? `<span class="card-date">${dateStr}</span>` : ''}
         </div>
-        ${total ? `<div class="card-prog"><div class="card-prog-fill" style="width:${Math.round(sel / total * 100)}%"></div></div>` : ''}
+        ${total ? `<div class="card-prog"><div class="card-prog-fill" style="width:${albumSelPct(album)}%"></div></div>` : ''}
+        ${visibleGals.length ? `<div class="card-chips">${visibleGals.map(g => `<span class="card-chip">${g.name}</span>`).join('')}${extraGals ? `<span class="card-chip card-chip-more">+${extraGals}</span>` : ''}</div>` : ''}
         ${album.photoStaff ? `<div class="card-photo-staff">📷 ${album.photoStaff}</div>` : ''}
       </div>
     </div>`;
@@ -1275,8 +1399,8 @@ function openAlbum(id) {
 function renderAlbumListView(list) {
   const rows = list.map(a => {
     const sel = albumSelCount(a), total = (a.photos || []).length;
-    const pct = total ? Math.round(sel / total * 100) : 0;
-    const dl = deadlineBadge(a.deadline);
+    const pct = albumSelPct(a);
+    const dl = deadlineBadge(a.deadline, a.status);
     const dlHtml = dl ? `<span class="${dl.cls === 'dl-over' ? 'card-dl-over' : dl.cls === 'dl-soon' ? 'card-dl-soon' : 'card-dl-ok'}">${dl.text}</span>` : '—';
     const cover = albumCoverUrl(a);
     const staff = (a.photoStaff || '').trim();
@@ -1288,7 +1412,7 @@ function renderAlbumListView(list) {
       <div><div class="alv-name">${a.name || 'Album không tên'}</div><div class="alv-sub">${shootTxt}</div></div>
       <span>${albumStatusPill(a)}</span>
       <div class="alv-prog-wrap">
-        <span class="alv-prog-text">${sel}/${total}${total ? ` · ${pct}%` : ''}</span>
+        <span class="alv-prog-text">${sel}/${a.maxCount ? a.maxCount + ' (tối đa)' : total}${total ? ` · ${pct}%` : ''}</span>
         ${total ? `<div class="alv-prog-bar"><div class="alv-prog-fill" style="width:${pct}%"></div></div>` : ''}
       </div>
       <span style="font-size:12px">${dlHtml}</span>
@@ -1308,17 +1432,33 @@ function renderAlbumKanban(list) {
   list.forEach(a => (groups[a.status || 'new'] || groups.new).push(a));
   const cols = STATUS_ORDER.map(st => {
     const items = groups[st];
+    const color = STATUS_COLORS[st] || 'var(--muted)';
     const cards = items.map(a => {
       const sel = albumSelCount(a), total = (a.photos || []).length;
-      const dl = deadlineBadge(a.deadline);
-      return `<div class="kanban-card" onclick="openAlbum('${a.id}')">
+      const pct = albumSelPct(a);
+      const dl  = deadlineBadge(a.deadline, a.status);
+      const dlHtml = dl
+        ? `<span class="kc-dl ${dl.cls}">${dl.text}</span>`
+        : '';
+      const dateStr = a.createdAt ? fmtDate(a.createdAt) : '';
+      return `<div class="kanban-card" onclick="openAlbum('${a.id}')" style="border-left-color:${color}">
         <div class="kanban-card-name">${a.name || 'Album không tên'}</div>
-        <div class="kanban-card-meta">${sel}/${total} ảnh${dl ? ` · ${dl.text}` : ''}</div>
+        <div class="kc-row">
+          <span class="kc-count">${sel}/${a.maxCount || total} ảnh</span>
+          ${dlHtml}
+        </div>
+        ${total ? `<div class="kc-prog"><div class="kc-prog-fill" style="width:${pct}%;background:${color}"></div></div>` : ''}
+        ${dateStr ? `<div class="kc-date">${dateStr}</div>` : ''}
       </div>`;
     }).join('');
-    return `<div class="kanban-col">
-      <div class="kanban-col-head"><span>${STATUS_LABELS[st]}</span><span class="kanban-col-count">${items.length}</span></div>
-      ${cards || '<div class="kanban-empty">Trống</div>'}
+    return `<div class="kanban-col" data-st="${st}">
+      <div class="kanban-col-head" style="border-top:3px solid ${color}">
+        <span class="kanban-col-title">${STATUS_LABELS[st]}</span>
+        <span class="kanban-col-count" style="background:${color}20;color:${color}">${items.length}</span>
+      </div>
+      <div class="kanban-cards">
+        ${cards || '<div class="kanban-empty">Trống</div>'}
+      </div>
     </div>`;
   }).join('');
   return `<div class="albums-kanban-view">${cols}</div>`;
@@ -1329,7 +1469,7 @@ function renderAlbumMasonry(list) {
   const cards = list.map(a => {
     const cover = albumCoverUrl(a);
     const sel = albumSelCount(a), total = (a.photos || []).length;
-    const dl = deadlineBadge(a.deadline);
+    const dl = deadlineBadge(a.deadline, a.status);
     const dlHtml = dl ? `<div class="${dl.cls === 'dl-over' ? 'card-dl-over' : dl.cls === 'dl-soon' ? 'card-dl-soon' : 'card-dl-ok'}">${dl.text}</div>` : '';
     return `<div class="masonry-card" onclick="openAlbum('${a.id}')">
       <div class="masonry-thumb" style="${cover ? `height:auto` : 'height:120px'}">${cover ? `<img src="${cover}" style="width:100%;display:block" loading="lazy">` : '📷'}</div>
@@ -1394,9 +1534,21 @@ function renderAlbumsList() {
         e.stopPropagation();
         const album = S.albums.find(a => a.id === id);
         if (!album) return;
-        if (btn.dataset.action === 'edit') openEditModal(album);
-        else if (btn.dataset.action === 'share') openShareModal(album);
-        else if (btn.dataset.action === 'trash') trashAlbum(album);
+        const action = btn.dataset.action;
+        if (action === 'edit') openEditModal(album);
+        else if (action === 'share') openShareModal(album);
+        else if (action === 'trash') trashAlbum(album);
+        else if (action === 'cover') { openAlbum(id); setTimeout(openCoverModal, 150); }
+        else if (action === 'status') { if (can('album', 'edit')) showStatusDropdown(btn, album); }
+        else if (action === 'menu') {
+          const dd = el.querySelector('.card-dropdown');
+          if (!dd) return;
+          document.querySelectorAll('.card-dropdown.open').forEach(d => { if (d !== dd) d.classList.remove('open'); });
+          dd.classList.toggle('open');
+          if (dd.classList.contains('open')) {
+            setTimeout(() => document.addEventListener('click', () => dd.classList.remove('open'), { once: true }), 0);
+          }
+        }
       };
     });
   });
@@ -1407,7 +1559,15 @@ function renderAlbumsList() {
    ───────────────────────────────────────────── */
 
 function renderDashboard() {
-  const active = S.albums.filter(a => !a.trashed);
+  const active = S.albums.filter(a => {
+    if (a.trashed) return false;
+    if (S.filterDateFrom || S.filterDateTo) {
+      const ts = a.createdAt || a.lastActivity || 0;
+      if (S.filterDateFrom && ts < new Date(S.filterDateFrom).getTime()) return false;
+      if (S.filterDateTo   && ts > new Date(S.filterDateTo).getTime() + 86399999) return false;
+    }
+    return true;
+  });
 
   const byStatus = st => active.filter(a => (a.status || 'new') === st).length;
   const choosing = byStatus('choosing');
@@ -1417,7 +1577,7 @@ function renderDashboard() {
   const withDl = active
     .filter(a => a.deadline)
     .map(a => ({ a, d: Math.ceil((new Date(a.deadline) - Date.now()) / 86400000) }));
-  const overdue = withDl.filter(x => x.d < 0).sort((x, y) => x.d - y.d);
+  const overdue = withDl.filter(x => x.d < 0 && x.a.status !== 'done' && x.a.status !== 'delivered').sort((x, y) => x.d - y.d);
   const soon = withDl.filter(x => x.d >= 0 && x.d <= 3).sort((x, y) => x.d - y.d);
   const uploadingCount = active.filter(a => albumIsUploading(a)).length;
   const overdueCount = overdue.length;
@@ -1464,6 +1624,17 @@ function renderDashboard() {
     </div>`;
   }).join('');
 
+  // Update deadline section badge
+  const dlBadge = document.getElementById('dash-deadline-badge');
+  if (dlBadge) {
+    if (overdueCount > 0) {
+      dlBadge.textContent = overdueCount + ' trễ hạn';
+      dlBadge.hidden = false;
+    } else {
+      dlBadge.hidden = true;
+    }
+  }
+
   // Deadline list — với avatar initials màu theo urgency
   const dlEl = document.getElementById('dash-deadline');
   const dlItems = [...overdue, ...soon].slice(0, 8);
@@ -1487,11 +1658,12 @@ function renderDashboard() {
   const recEl = document.getElementById('dash-recent');
   if (recEl) recEl.innerHTML = recent.length ? recent.map(a => {
     const sel = albumSelCount(a), total = (a.photos || []).length;
-    const pct = total > 0 ? Math.round(sel / total * 100) : 0;
+    const pct = albumSelPct(a);
+    const quotaLabel = a.maxCount ? `${sel}/${a.maxCount} ảnh đã chọn` : `${sel}/${total} ảnh`;
     return `<div class="dash-row" onclick="openAlbum('${a.id}')">
       <span class="dash-row-name" style="flex:1">
         ${a.name || 'Album'}
-        <div class="dash-prog-wrap"><div class="dash-prog-bar"><div class="dash-prog-fill" style="width:${pct}%"></div></div><span class="dash-prog-cnt">${sel}/${total} ảnh</span></div>
+        <div class="dash-prog-wrap"><div class="dash-prog-bar"><div class="dash-prog-fill" style="width:${pct}%"></div></div><span class="dash-prog-cnt">${quotaLabel}</span></div>
       </span>
       ${albumStatusPill(a)}
     </div>`;
@@ -1553,6 +1725,12 @@ function renderSettings() {
   if (connectBtn) connectBtn.hidden = !can('drive', 'connect');
   const exportGroup = document.getElementById('settings-export-group');
   if (exportGroup) exportGroup.hidden = !can('album', 'edit');
+
+  // Date range filter
+  const fromEl = document.getElementById('settings-date-from');
+  const toEl   = document.getElementById('settings-date-to');
+  if (fromEl) fromEl.value = S.filterDateFrom;
+  if (toEl)   toEl.value   = S.filterDateTo;
 }
 
 /* ─────────────────────────────────────────────
@@ -1668,7 +1846,7 @@ function renderProgressPage() {
   });
 
   // Overdue banner
-  const overdue = filtered.filter(a => a.deadline && new Date(a.deadline) < new Date());
+  const overdue = filtered.filter(a => a.deadline && new Date(a.deadline) < new Date() && a.status !== 'done' && a.status !== 'delivered');
   if (banner) {
     banner.innerHTML = overdue.length
       ? `<div class="deadline-banner">⚠ ${overdue.length} album đang trễ hạn trả ảnh!</div>` : '';
@@ -1688,7 +1866,7 @@ function renderProgressPage() {
     list.className = '';
     list.innerHTML = filtered.map(a => {
       const shoot = parseShootDate(a.name);
-      const dl = deadlineBadge(a.deadline);
+      const dl = deadlineBadge(a.deadline, a.status);
       const sel = (a.photos || []).filter(p => p.selected || p.review === 'selected').length;
       return `<div class="prog-row" data-id="${a.id}">
         <span class="prog-client">${a.name || '—'}<small>${a.client || ''}</small></span>
@@ -1722,8 +1900,8 @@ function renderTrashPage() {
       <div class="card-body">
         <div class="card-name">${a.name || 'Album không tên'}</div>
         <div class="card-meta" style="gap:6px">
-          <button class="btn ghost sm" data-restore="${a.id}">Khôi phục</button>
-          <button class="btn danger sm" data-perm="${a.id}">Xoá vĩnh viễn</button>
+          <button style="color:#5C8A3A;background:#EAF0E0;border:none;border-radius:10px;padding:6px 12px;font-size:12.5px;font-weight:700;cursor:pointer;transition:opacity .15s" data-restore="${a.id}">Khôi phục</button>
+          <button style="color:#C0492E;background:#FBEAE3;border:none;border-radius:10px;padding:6px 12px;font-size:12.5px;font-weight:700;cursor:pointer;transition:opacity .15s" data-perm="${a.id}">Xoá vĩnh viễn</button>
         </div>
       </div>
     </div>`).join('');
@@ -1792,6 +1970,8 @@ function openCreateModal() {
   _createFiles = [];
   _createSrc = 'upload';
   document.getElementById('album-name').value = '';
+  const cliEl = document.getElementById('album-client');
+  if (cliEl) cliEl.value = '';
   document.getElementById('deadline-days').value = '';
   document.getElementById('max-count').value = '';
   document.getElementById('drive-url').value = '';
@@ -1810,6 +1990,7 @@ async function handleCreateSubmit(e) {
   e.preventDefault();
   const name = document.getElementById('album-name').value.trim();
   if (!name) { toast('Vui lòng nhập tên album'); return; }
+  const client = document.getElementById('album-client')?.value.trim() || null;
 
   const deadlineDays = parseInt(document.getElementById('deadline-days').value) || null;
   const maxCount = parseInt(document.getElementById('max-count').value) || null;
@@ -1844,6 +2025,7 @@ async function handleCreateSubmit(e) {
       lockPhone: lockPhone || null,
       photos,
       folderId,
+      client: client || null,
       photoStaff: S.auth?.name || null,   // photographer who created/uploaded this set
       createdAt: Date.now(),
       lastActivity: Date.now(),
@@ -1907,7 +2089,9 @@ function detailPhotos(album) {
   const gallery = currentDetailGallery(album);
   const gid = gallery ? gallery.id : null;
   let photos = (album.photos || []).filter(p =>
-    gid ? (p.galleryId === gid) : !p.galleryId
+    gallery?.autoSelected
+      ? (p.review === 'selected' || p.selected)
+      : gid ? (p.galleryId === gid) : !p.galleryId
   );
   photos = [...photos].sort((a, b) => {
     const na = (a.name || '').toLowerCase(), nb = (b.name || '').toLowerCase();
@@ -1958,20 +2142,24 @@ function renderDetailSets(album) {
   const galleries = album.galleries || [];
   const defaultCount = (album.photos || []).filter(p => !p.galleryId).length;
 
-  const mkItem = (idx, name, count, gid) => `
+  const galCount = (g) => g.autoSelected
+    ? (album.photos || []).filter(p => p.review === 'selected' || p.selected).length
+    : (album.photos || []).filter(p => p.galleryId === g.id).length;
+
+  const mkItem = (idx, name, count, gid, autoSel) => `
     <div class="set-item ${S.detailSetIdx === idx ? 'active' : ''}" data-set-idx="${idx}">
-      <span class="set-name">${name}</span>
+      <span class="set-name">${autoSel ? '✓ ' : ''}${name}</span>
       <span class="set-count">${count}</span>
       <div class="set-acts">
-        ${gid ? `<button class="set-act" data-rename="${gid}" title="Đổi tên">✏</button>
+        ${gid && !autoSel ? `<button class="set-act" data-rename="${gid}" title="Đổi tên">✏</button>
         <button class="set-act set-up" data-upload="${gid}" title="Tải ảnh vào album này">⬆</button>
         <button class="set-act set-del" data-deleteg="${gid}" title="Xoá album">🗑</button>` : ''}
       </div>
     </div>`;
 
-  el.innerHTML = mkItem(0, 'Ảnh gốc', defaultCount, null) +
+  el.innerHTML = mkItem(0, 'Ảnh gốc', defaultCount, null, false) +
     galleries.map((g, i) =>
-      mkItem(i + 1, g.name, (album.photos || []).filter(p => p.galleryId === g.id).length, g.id)
+      mkItem(i + 1, g.name, galCount(g), g.id, g.autoSelected)
     ).join('');
 
   // Switch gallery
@@ -2071,7 +2259,8 @@ function renderDetailGrid() {
         <img src="${photoUrl(p, 's120')}" alt="${p.name}" loading="lazy">
         <span class="photo-name">${p.name || p.id}</span>
         ${sel.has(p.id) ? '<span class="sel-tag">✓ Đã chọn</span>' : ''}
-        ${p.note ? `<span class="note-tag" title="${p.note}">📝</span>` : ''}
+        ${p.note ? `<span class="note-tag note-tag-client" title="${p.note}">💬 Khách</span>` : ''}
+        ${p.studioNote ? `<span class="note-tag note-tag-studio" title="${p.studioNote}">🔖 Studio</span>` : ''}
         ${S.detailPickMode ? `<input type="checkbox" class="pick-cb" ${S.detailPicked.has(p.id) ? 'checked' : ''}>` : ''}
       </div>`).join('');
   } else {
@@ -2079,10 +2268,25 @@ function renderDetailGrid() {
     grid.innerHTML = photos.map((p, i) => `
       <div class="photo-thumb ${sel.has(p.id) ? 'selected' : ''} ${S.detailPicked.has(p.id) ? 'picked' : ''}" data-idx="${i}" data-id="${p.id}">
         <img src="${photoUrl(p, 's400')}" alt="${p.name}" loading="lazy">
-        ${p.note ? '<div class="note-dot" title="Có ghi chú">📝</div>' : ''}
+        <div class="photo-num" title="${p.name || ''}">${photoDispName(p, i)}</div>
+        ${p.note ? '<div class="note-dot note-dot-client" title="Ghi chú khách: ' + p.note.slice(0,60).replace(/"/g,'') + '">💬</div>' : ''}
+        ${p.studioNote ? '<div class="note-dot note-dot-studio" title="Ghi chú studio: ' + p.studioNote.slice(0,60).replace(/"/g,'') + '">🔖</div>' : ''}
         ${S.detailPickMode ? `<input type="checkbox" class="pick-cb" ${S.detailPicked.has(p.id) ? 'checked' : ''}>` : ''}
         ${sel.has(p.id) ? '<div class="sel-badge">✓</div>' : ''}
       </div>`).join('');
+  }
+
+  // Update selected count pill in grid header
+  const selPill = document.getElementById('ad-sel-count');
+  if (selPill) {
+    const selCount = sel.size;
+    const total = photos.length;
+    if (selCount > 0) {
+      selPill.textContent = `${selCount} đã chọn / ${total}`;
+      selPill.hidden = false;
+    } else {
+      selPill.hidden = true;
+    }
   }
 
   // Events
@@ -2211,12 +2415,18 @@ function renderLightbox() {
   const album = isClient ? S.clientAlbum : getDetailAlbum();
   const review = isClient ? (S.clientReview[p.id] || {}) : {};
 
-  // Note box
+  // Note box — client note
   const noteBox = document.getElementById('lb-note-box');
   const noteTxt = document.getElementById('lb-note-text');
   const note = review.n || p.note || '';
   if (note) { noteBox.hidden = false; noteTxt.textContent = note; }
   else noteBox.hidden = true;
+
+  // Studio note box (detail context only)
+  const studioNoteBox = document.getElementById('lb-studio-note-box');
+  const studioNoteTa  = document.getElementById('lb-studio-note-ta');
+  if (studioNoteBox) studioNoteBox.hidden = isClient;
+  if (!isClient && studioNoteTa) studioNoteTa.value = p.studioNote || '';
 
   // Choose button
   const lbChoose = document.getElementById('lb-choose');
@@ -2330,9 +2540,34 @@ function openShareModal(album) {
   const base = location.origin + location.pathname;
   const link = `${base}?al=${album.id}`;
   document.getElementById('share-link').value = link;
-  // Warn if album has no Drive photos
   const hasOnlinePhotos = (album.photos || []).some(p => p.id);
   document.getElementById('share-warn').hidden = hasOnlinePhotos;
+
+  // QR code
+  const qrWrap = document.getElementById('share-qr');
+  if (qrWrap) {
+    qrWrap.innerHTML = '';
+    if (typeof QRCode !== 'undefined') {
+      new QRCode(qrWrap, { text: link, width: 156, height: 156, correctLevel: QRCode.CorrectLevel.M });
+    }
+  }
+
+  // Email template (rebuild each open so it reflects current album/link)
+  const emailEl = document.getElementById('share-email-tmpl');
+  if (emailEl) {
+    const clientName = album.client || album.name || 'bạn';
+    emailEl.value =
+`Xin chào ${clientName},
+
+Studio Lam Miên gửi bạn link xem và chọn ảnh:
+${link}
+
+Vui lòng xem qua, chọn những ảnh bạn thích rồi nhấn "Gửi hậu kỳ" để xác nhận.
+
+Trân trọng,
+Lam Miên Studio`;
+  }
+
   openModal('share-modal');
 }
 
@@ -2374,9 +2609,9 @@ async function initClientPicker() {
     }
   }
 
-  // Phone gate
-  if (album.lockPhone) {
-    const gateOk = await runPhoneGate(album.lockPhone);
+  // Phone gate — xác thực server-side (lockPhone không còn trong response)
+  if (album.isLocked) {
+    const gateOk = await runPhoneGate(album.id);
     if (!gateOk) return true;
   }
 
@@ -2407,7 +2642,7 @@ function showClientError(msg) {
   document.getElementById('app')?.setAttribute('hidden', '');
 }
 
-function runPhoneGate(expectedPhone) {
+function runPhoneGate(albumId) {
   return new Promise(resolve => {
     document.getElementById('client-gate')?.classList.remove('hidden');
     document.getElementById('client')?.removeAttribute('hidden');
@@ -2415,14 +2650,29 @@ function runPhoneGate(expectedPhone) {
     const submit = document.getElementById('gate-submit');
     const input = document.getElementById('gate-input');
     const errEl = document.getElementById('gate-error');
-    const handler = () => {
-      const val = (input?.value || '').replace(/\D/g, '');
-      const exp = (expectedPhone || '').replace(/\D/g, '');
-      if (val === exp) {
-        document.getElementById('client-gate')?.classList.add('hidden');
-        resolve(true);
-      } else {
-        if (errEl) errEl.textContent = 'SĐT không đúng. Thử lại.';
+
+    // Xác thực server-side: gửi SĐT lên server để so sánh
+    // (lockPhone không còn trong GET response — tránh bypass client-side)
+    const handler = async () => {
+      const phone = (input?.value || '').trim();
+      if (!phone) { if (errEl) errEl.textContent = 'Vui lòng nhập SĐT.'; return; }
+      if (submit) submit.disabled = true;
+      try {
+        const r = await fetch(`/api/album?id=${encodeURIComponent(albumId)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'verify-phone', phone }),
+        });
+        if (r.ok) {
+          document.getElementById('client-gate')?.classList.add('hidden');
+          resolve(true);
+        } else {
+          if (errEl) errEl.textContent = 'SĐT không đúng. Thử lại.';
+        }
+      } catch {
+        if (errEl) errEl.textContent = 'Lỗi mạng. Thử lại.';
+      } finally {
+        if (submit) submit.disabled = false;
       }
     };
     submit?.addEventListener('click', handler, { once: false });
@@ -2933,6 +3183,8 @@ async function init() {
   // Apply saved theme
   const savedTheme = lsGet(THEME_KEY) || 'light';
   applyTheme(savedTheme);
+  S.filterDateFrom = lsGet(FILTER_DATE_FROM_KEY) || '';
+  S.filterDateTo   = lsGet(FILTER_DATE_TO_KEY)   || '';
 
   // Theme toggle buttons (both app and client)
   document.querySelectorAll('.theme-toggle').forEach(btn => {
@@ -3015,6 +3267,28 @@ async function init() {
     connectStudioDrive();
   });
   document.getElementById('settings-sheet-export')?.addEventListener('click', () => exportToSheet());
+  const applyDateFilter = () => {
+    renderAlbumsList();
+    if (S.page === 'dashboard') renderDashboard();
+  };
+  document.getElementById('settings-date-from')?.addEventListener('change', e => {
+    S.filterDateFrom = e.target.value;
+    lsSet(FILTER_DATE_FROM_KEY, S.filterDateFrom);
+    applyDateFilter();
+  });
+  document.getElementById('settings-date-to')?.addEventListener('change', e => {
+    S.filterDateTo = e.target.value;
+    lsSet(FILTER_DATE_TO_KEY, S.filterDateTo);
+    applyDateFilter();
+  });
+  document.getElementById('settings-date-clear')?.addEventListener('click', () => {
+    S.filterDateFrom = ''; S.filterDateTo = '';
+    lsSet(FILTER_DATE_FROM_KEY, ''); lsSet(FILTER_DATE_TO_KEY, '');
+    const f = document.getElementById('settings-date-from');
+    const t = document.getElementById('settings-date-to');
+    if (f) f.value = ''; if (t) t.value = '';
+    applyDateFilter();
+  });
   document.getElementById('settings-open-perms')?.addEventListener('click', () => {
     showPage('perms'); setHash('perms');
   });
@@ -3094,6 +3368,11 @@ async function init() {
 
   // Share modal
   document.getElementById('share-close')?.addEventListener('click', () => closeModal('share-modal'));
+  document.getElementById('share-copy-email')?.addEventListener('click', () => {
+    const el = document.getElementById('share-email-tmpl');
+    if (!el) return;
+    navigator.clipboard.writeText(el.value).then(() => toast('✓ Đã sao chép mẫu email'));
+  });
   document.getElementById('share-copy')?.addEventListener('click', copyShareLink);
   document.getElementById('share-open')?.addEventListener('click', () => {
     window.open(document.getElementById('share-link').value, '_blank');
@@ -3353,6 +3632,19 @@ function wireClientEvents() {
     if (!p) return;
     S.clientReview[p.id] = { ...(S.clientReview[p.id] || {}), n: '' };
     renderLightbox();
+  });
+
+  // Studio note — auto-save on input
+  document.getElementById('lb-studio-note-ta')?.addEventListener('input', () => {
+    const p = S.lbPhotos[S.lbIdx];
+    if (!p || S.lbContext !== 'detail') return;
+    p.studioNote = document.getElementById('lb-studio-note-ta').value.trim();
+    const album = getDetailAlbum();
+    if (album) { album.lastActivity = Date.now(); saveAlbumsLocal(); SyncManager.forcePush(album).catch(() => {}); }
+    // Update grid badge live
+    const dot = document.querySelector(`.photo-thumb[data-id='${p.id}'] .note-dot-studio`);
+    if (p.studioNote && !dot) renderDetailGrid();
+    else if (!p.studioNote && dot) renderDetailGrid();
   });
   document.getElementById('lb-dl')?.addEventListener('click', () => {
     const p = S.lbPhotos[S.lbIdx];
