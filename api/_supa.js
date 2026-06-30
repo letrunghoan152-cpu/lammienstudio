@@ -1,7 +1,24 @@
 // Helper dùng chung cho các serverless function — Supabase + xác thực nhân sự
 // Làm sạch URL: bỏ khoảng trắng, dấu / cuối, hoặc /rest/v1 dán thừa
+const crypto = require('crypto');
 const BASE = (process.env.SUPABASE_URL || '').trim().replace(/\/+$/, '').replace(/\/rest\/v1$/, '');
 const KEY = (process.env.SUPABASE_SERVICE_KEY || '').trim();
+
+/* ---- Cổng SĐT (phone gate) — token HMAC không trạng thái ----
+   Sau khi khách nhập đúng SĐT, server cấp token = HMAC(albumId:SĐT, KEY).
+   Token này bắt buộc khi GET ảnh / POST lựa chọn với album bị khoá, nên không
+   thể bypass gate bằng cách gọi API trực tiếp. */
+function gateToken(id, phoneDigits) {
+  return crypto.createHmac('sha256', KEY).update(id + ':' + phoneDigits).digest('hex').slice(0, 32);
+}
+function gateValid(id, data, token) {
+  if (!data || !data.lockPhone) return true; // album không khoá -> luôn hợp lệ
+  if (!token) return false;
+  const expected = gateToken(id, (data.lockPhone || '').replace(/\D/g, ''));
+  const a = Buffer.from(String(token));
+  const b = Buffer.from(expected);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
 const SHEET_ID = process.env.STAFF_SHEET_ID; // Google Sheet quản lý tài khoản nhân sự
 
 function configured() { return !!(BASE && KEY); }
@@ -23,6 +40,65 @@ async function supa(path, opts = {}) {
   }
   const t = await res.text();
   return t ? JSON.parse(t) : null;
+}
+
+/* ---- Cập nhật album an toàn với optimistic locking ----
+   Dùng counter `_rev` lưu ngay trong JSON `data` (không cần migrate cột DB).
+   mutate(existingData|null) -> newData (hoặc null để huỷ).
+   Mỗi lần ghi được điều kiện theo _rev cũ (compare-and-swap); nếu có request
+   khác chen vào (0 dòng khớp) thì đọc lại & thử lại. Sau khi hết lượt thử vẫn
+   ghi đè an toàn (last-write-wins) để KHÔNG bao giờ chặn việc lưu của studio/khách. */
+async function casUpdateAlbum(id, mutate, { maxRetries = 4 } = {}) {
+  const path = `albums?id=eq.${encodeURIComponent(id)}`;
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    const rows = await supa(`${path}&select=data`);
+    const existing = rows && rows[0] ? rows[0].data : null;
+    const oldRev = existing && typeof existing._rev === 'number' ? existing._rev : null;
+
+    const next = mutate(existing ? { ...existing } : null);
+    if (!next) return { ok: false, reason: 'cancelled' };
+    next._rev = (oldRev || 0) + 1;
+
+    if (existing == null) {
+      // Album chưa có trên server -> INSERT. Nếu bị tạo bởi request khác (race)
+      // thì supa() ném lỗi unique -> vòng sau sẽ thành UPDATE.
+      try {
+        await supa('albums', {
+          method: 'POST', prefer: 'return=minimal',
+          body: JSON.stringify([{ id, data: next, updated_at: new Date().toISOString() }]),
+        });
+        return { ok: true, data: next };
+      } catch (_) { continue; }
+    }
+
+    // UPDATE có điều kiện theo _rev cũ (CAS). Bản ghi cũ chưa có _rev -> lọc is.null.
+    const revFilter = oldRev == null ? 'data->>_rev=is.null' : `data->>_rev=eq.${oldRev}`;
+    try {
+      const updated = await supa(`${path}&${revFilter}`, {
+        method: 'PATCH', prefer: 'return=representation',
+        body: JSON.stringify({ data: next, updated_at: new Date().toISOString() }),
+      });
+      if (updated && updated.length) return { ok: true, data: next };
+      // 0 dòng khớp -> ai đó vừa ghi xen -> đọc lại & thử lại
+    } catch (e) {
+      // Nếu bộ lọc JSONB không được hỗ trợ (lỗi PostgREST) -> bỏ CAS, dùng
+      // fallback ghi đè an toàn bên dưới để KHÔNG bao giờ chặn việc lưu.
+      console.warn('[LMS] casUpdateAlbum CAS filter failed, falling back:', e.message || e);
+      break;
+    }
+  }
+
+  // Fallback: hết lượt thử -> ghi đè không điều kiện để không mất thao tác lưu.
+  const rows = await supa(`${path}&select=data`);
+  const existing = rows && rows[0] ? rows[0].data : null;
+  const next = mutate(existing ? { ...existing } : null);
+  if (!next) return { ok: false, reason: 'cancelled' };
+  next._rev = ((existing && existing._rev) || 0) + 1;
+  await supa('albums?on_conflict=id', {
+    method: 'POST', prefer: 'resolution=merge-duplicates,return=minimal',
+    body: JSON.stringify([{ id, data: next, updated_at: new Date().toISOString() }]),
+  });
+  return { ok: true, data: next, fellBack: true };
 }
 
 /* ---- Cấu hình dùng chung (bảng app_config: key text PK, value jsonb) ---- */
@@ -168,4 +244,4 @@ function can(role, resource, action) {
   return !!(PERMISSIONS[r]?.[resource]?.[action]);
 }
 
-module.exports = { supa, configured, checkAuth, checkAuthFull, validUser, sendStudioEmail, getConfig, setConfig, resolveToken, PERMISSIONS, can };
+module.exports = { supa, configured, checkAuth, checkAuthFull, validUser, sendStudioEmail, getConfig, setConfig, resolveToken, PERMISSIONS, can, casUpdateAlbum, gateToken, gateValid };

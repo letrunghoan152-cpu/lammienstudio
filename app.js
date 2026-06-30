@@ -63,6 +63,7 @@ const S = {
   driveToken: null,            // { token, exp }
   // Client picker
   clientAlbum: null,
+  clientGate: null,            // gate token (album bị khoá SĐT) để GET ảnh & POST lựa chọn
   clientReview: {},            // { photoId: {r, n} }
   clientPage: 1,
   clientPageSize: 40,
@@ -338,10 +339,12 @@ async function apiDeleteAlbum(id, permanent = false) {
   return res && res.ok;
 }
 
-/** Get album for guest (no auth) — with optional studio auth in detail context */
-async function apiGetAlbum(id, studioContext = false) {
+/** Get album for guest (no auth) — with optional studio auth in detail context.
+ *  gate: token cổng SĐT (cần để server trả ảnh của album bị khoá). */
+async function apiGetAlbum(id, studioContext = false, gate = null) {
   const opts = studioContext ? { headers: apiHeaders() } : {};
-  const res = await fetch(`/api/album?id=${encodeURIComponent(id)}`, opts);
+  const q = gate ? `&gate=${encodeURIComponent(gate)}` : '';
+  const res = await fetch(`/api/album?id=${encodeURIComponent(id)}${q}`, opts);
   if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'HTTP ' + res.status);
   return res.json();
 }
@@ -369,7 +372,7 @@ const GuestSaveManager = {
         const res = await fetch(`/api/album?id=${encodeURIComponent(job.albumId)}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ review: job.review, status: job.status }),
+          body: JSON.stringify({ review: job.review, status: job.status, gate: S.clientGate || undefined }),
         });
         if (res.ok) {
           // success
@@ -2639,10 +2642,18 @@ async function initClientPicker() {
     }
   }
 
-  // Phone gate — xác thực server-side (lockPhone không còn trong response)
+  // Phone gate — xác thực server-side. Album bị khoá: GET không trả `photos`
+  // cho tới khi có gate token; sau khi qua cổng phải nạp lại album kèm token.
   if (album.isLocked) {
-    const gateOk = await runPhoneGate(album.id);
-    if (!gateOk) return true;
+    const gate = await runPhoneGate(album.id);
+    if (!gate) return true;
+    S.clientGate = gate;
+    try {
+      album = await apiGetAlbum(album.id, false, gate);
+    } catch (e) {
+      showClientError('Không tải được ảnh sau khi xác thực: ' + e.message);
+      return true;
+    }
   }
 
   S.clientAlbum = album;
@@ -2694,8 +2705,9 @@ function runPhoneGate(albumId) {
           body: JSON.stringify({ action: 'verify-phone', phone }),
         });
         if (r.ok) {
+          const body = await r.json().catch(() => ({}));
           document.getElementById('client-gate')?.classList.add('hidden');
-          resolve(true);
+          resolve(body.gate || true); // trả gate token để dùng cho GET/POST sau
         } else {
           if (errEl) errEl.textContent = 'SĐT không đúng. Thử lại.';
         }
@@ -2900,7 +2912,7 @@ async function handleFinishBtn() {
         const res = await fetch(`/api/album?id=${encodeURIComponent(album.id)}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ review: S.clientReview, status: 'done' }),
+          body: JSON.stringify({ review: S.clientReview, status: 'done', gate: S.clientGate || undefined }),
         });
         if (res.ok) {
           document.getElementById('sum-count').textContent = selCount;

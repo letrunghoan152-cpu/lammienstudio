@@ -2,7 +2,7 @@
 // GET            -> danh sách album (kèm _serverUpdatedAt)
 // POST {album}   -> tạo / cập nhật 1 album
 // DELETE ?id=    -> xoá album (phân quyền theo role)
-const { supa, configured, checkAuthFull, can } = require('./_supa');
+const { supa, configured, checkAuthFull, can, casUpdateAlbum } = require('./_supa');
 
 module.exports = async (req, res) => {
   if (!configured()) return res.status(503).json({ error: 'Chưa cấu hình máy chủ' });
@@ -34,34 +34,29 @@ module.exports = async (req, res) => {
         return res.status(403).json({ error: 'Tài khoản của bạn không có quyền sửa album' });
       }
 
-      // Giữ lại lựa chọn của khách (review, note, selectedAt) khi studio push
-      if (!isNew) {
-        try {
-          const sv = existing[0].data;
-          if (sv && Array.isArray(sv.photos)) {
-            const byId = {};
-            sv.photos.forEach(p => { byId[p.id] = p; });
-            (album.photos || []).forEach(p => {
-              const o = byId[p.id];
-              if (o && (o.review || o.note)) {
-                p.review = o.review || '';
-                p.selected = o.review === 'selected';
-                if (o.note && !p.note) p.note = o.note;
-              }
-            });
-            if (sv.selectedAt && !album.selectedAt) {
-              album.selectedAt = sv.selectedAt;
-              if (!album.deadline) album.deadline = sv.deadline || '';
+      // Ghi qua optimistic locking. Việc merge lựa chọn của khách (review, note,
+      // selectedAt) được thực hiện TRÊN bản server mới nhất ngay trước khi ghi,
+      // nên không còn cửa sổ TOCTOU làm mất lựa chọn khách khi studio push.
+      const result = await casUpdateAlbum(album.id, (sv) => {
+        if (sv && Array.isArray(sv.photos)) {
+          const byId = {};
+          sv.photos.forEach(p => { byId[p.id] = p; });
+          (album.photos || []).forEach(p => {
+            const o = byId[p.id];
+            if (o && (o.review || o.note)) {
+              p.review = o.review || '';
+              p.selected = o.review === 'selected';
+              if (o.note && !p.note) p.note = o.note;
             }
+          });
+          if (sv.selectedAt && !album.selectedAt) {
+            album.selectedAt = sv.selectedAt;
+            if (!album.deadline) album.deadline = sv.deadline || '';
           }
-        } catch (_) {}
-      }
-
-      await supa('albums?on_conflict=id', {
-        method: 'POST',
-        prefer: 'resolution=merge-duplicates,return=minimal',
-        body: JSON.stringify([{ id: album.id, data: album, updated_at: new Date().toISOString() }]),
+        }
+        return album;
       });
+      if (!result.ok) return res.status(409).json({ error: 'Không thể lưu album (xung đột đồng bộ)' });
       return res.status(200).json({ ok: true });
     }
 

@@ -6,11 +6,30 @@ const crypto = require('crypto');
 
 const DAYS = 7;
 
+// Rate limit đăng nhập: tối đa 10 lần thử / phút / IP (in-memory, reset khi cold start).
+// Giống /api/login để endpoint này không thành cổng dò mật khẩu không giới hạn.
+const _rl = new Map();
+function rateCheck(ip) {
+  const now = Date.now();
+  let r = _rl.get(ip);
+  if (!r || now > r.resetAt) { r = { count: 0, resetAt: now + 60000 }; _rl.set(ip, r); }
+  r.count++;
+  return r.count <= 10;
+}
+setInterval(() => {
+  const now = Date.now();
+  _rl.forEach((v, k) => { if (now > v.resetAt) _rl.delete(k); });
+}, 300000);
+
 module.exports = async (req, res) => {
   if (!configured()) return res.status(503).json({ error: 'Chưa cấu hình máy chủ (Supabase)' });
 
   /* ---- Tạo session (đăng nhập) ---- */
   if (req.method === 'POST') {
+    const ip = ((req.headers['x-forwarded-for'] || '') + '').split(',')[0].trim() || 'unknown';
+    if (!rateCheck(ip)) {
+      return res.status(429).json({ error: 'Quá nhiều lần thử đăng nhập. Vui lòng đợi 1 phút rồi thử lại.' });
+    }
     const { user, pass } = req.body || {};
     const found = await validUser(user, pass);
     if (!found) return res.status(401).json({ error: 'Sai tài khoản hoặc mật khẩu' });
@@ -20,12 +39,12 @@ module.exports = async (req, res) => {
       await supa('sessions', {
         method: 'POST',
         prefer: 'return=minimal',
-        body: JSON.stringify([{ token, user_id: found.user, user_name: found.name, role: found.role || 'staff', expires_at: expiresAt }]),
+        body: JSON.stringify([{ token, user_id: found.user, user_name: found.name, role: found.role || 'editor', expires_at: expiresAt }]),
       });
     } catch (e) {
       return res.status(500).json({ error: 'Lỗi tạo session: ' + String(e.message || e) });
     }
-    return res.status(200).json({ token, name: found.name, role: found.role || 'staff', expiresAt, sync: true });
+    return res.status(200).json({ token, name: found.name, role: found.role || 'editor', expiresAt, sync: true });
   }
 
   /* ---- Kiểm tra session (GET) ---- */
@@ -39,7 +58,7 @@ module.exports = async (req, res) => {
         await supa('sessions?token=eq.' + encodeURIComponent(token), { method: 'DELETE' }).catch(() => {});
         return res.status(401).json({ error: 'Phiên đã hết hạn' });
       }
-      return res.status(200).json({ ok: true, user: rows[0].user_id, name: rows[0].user_name, role: rows[0].role || 'staff' });
+      return res.status(200).json({ ok: true, user: rows[0].user_id, name: rows[0].user_name, role: rows[0].role || 'editor' });
     } catch (e) {
       return res.status(500).json({ error: String(e.message || e) });
     }
