@@ -6,6 +6,26 @@
 
 'use strict';
 
+function esc(s) {
+  if (s == null) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+/**
+ * Catch handler for fire-and-forget background sync/push calls. Always logs the
+ * failure (instead of swallowing it silently); pass notify=true for critical
+ * paths (e.g. upload completion) to also warn the user via toast.
+ */
+function syncErr(ctx = 'background sync', notify = false) {
+  return err => {
+    console.warn('[LMS] ' + ctx + ' failed:', err);
+    if (notify && typeof toast === 'function') {
+      toast('⚠ Đồng bộ thất bại — sẽ thử lại ở lần sync sau.');
+    }
+  };
+}
+
+
 /* ─────────────────────────────────────────────
    1. GLOBAL ERROR BOUNDARY
    ───────────────────────────────────────────── */
@@ -287,7 +307,7 @@ async function doLogin(user, pass) {
 
 async function doLogout(callServer = true) {
   if (callServer && S.auth?.token) {
-    fetch('/api/session', { method: 'DELETE', headers: { 'x-token': S.auth.token } }).catch(() => {});
+    fetch('/api/session', { method: 'DELETE', headers: { 'x-token': S.auth.token } }).catch(syncErr('logout session sync'));
   }
   S.auth = null;
   localStorage.removeItem(STORAGE_KEY);
@@ -425,6 +445,13 @@ const SyncManager = {
       const serverList = await apiGetAlbums();
       if (!serverList) return;
 
+      // Collect background pushes so we can hold the refresh lock until they
+      // settle — prevents the next refresh from racing in-flight writes (3b).
+      const pushes = [];
+      const queuePush = lo => pushes.push(
+        apiPushAlbum(lo).catch(err => console.warn('[LMS] Sync push failed:', err))
+      );
+
       const merged = serverList.map(sv => {
         const lo = S.albums.find(a => a.id === sv.id) ||
                    S.trashedAlbums.find(a => a.id === sv.id);
@@ -433,12 +460,18 @@ const SyncManager = {
             Date.now() - (sv.lastActivity || 0) > UPLOAD_STUCK_MS) {
           sv.uploading = false;
         }
+        // 3a: while an upload is in flight, photos are added to the local album
+        // before they reach the server. Always keep the local copy so a sync
+        // landing mid-upload can never overwrite freshly-uploaded photos.
+        if (lo && S.activeUploads.has(sv.id)) {
+          return lo;
+        }
         // B-2: last-write-wins với tolerance 8s để bù clock skew client/server.
         // forcePush được gọi ngay sau mỗi thay đổi, nên khi sync 30s chạy
         // thì server đã có data mới — chỉ push lại nếu local THỰC SỰ mới hơn.
         const CLOCK_SKEW_MS = 8000;
         if (lo && (lo.lastActivity || 0) > (sv._serverUpdatedAt || 0) + CLOCK_SKEW_MS) {
-          apiPushAlbum(lo).catch(() => {});
+          queuePush(lo);
           return lo;
         }
         return sv;
@@ -448,7 +481,7 @@ const SyncManager = {
       S.albums.forEach(lo => {
         if (!merged.find(m => m.id === lo.id)) {
           merged.push(lo);
-          apiPushAlbum(lo).catch(() => {});
+          queuePush(lo);
         }
       });
 
@@ -467,6 +500,9 @@ const SyncManager = {
       S.trashedAlbums = merged.filter(a => a.trashed);
       saveAlbumsLocal();
       renderCurrentPage();
+      // Keep the lock held until all background pushes settle, so a subsequent
+      // refresh can't read/merge while these writes are still in flight (3b).
+      if (pushes.length) await Promise.allSettled(pushes);
     } finally {
       this._refreshing = false;
     }
@@ -889,7 +925,7 @@ const UploadManager = {
     clearTimeout(this._savePendingTimer);
     this._savePendingTimer = setTimeout(() => {
       const album = S.albums.find(a => a.id === albumId);
-      if (album) apiPushAlbum(album).catch(() => {});
+      if (album) apiPushAlbum(album).catch(syncErr());
     }, 3000);
   },
 
@@ -938,7 +974,7 @@ const UploadManager = {
       album.uploading = false;
       album.lastActivity = Date.now();
       saveAlbumsLocal();
-      apiPushAlbum(album).catch(() => {});
+      apiPushAlbum(album).catch(syncErr('upload completion sync', true));
     }
 
     const totalFailed = galleries.reduce((n, g) => n + g.failed.length, 0);
@@ -1116,7 +1152,7 @@ function renderUploadDashboard() {
       card.dataset.album = s.albumId;
       card.innerHTML = `
         <div class="uf-head">
-          <span class="uf-name">⬆ ${s.albumName}</span>
+          <span class="uf-name">⬆ ${esc(s.albumName)}</span>
           <span class="uf-name-pct"></span>
         </div>
         <div class="uf-bar"><div class="uf-fill"></div></div>
@@ -1230,7 +1266,7 @@ function showStatusDropdown(anchor, album) {
       saveAlbumsLocal();
       dd.remove();
       renderAlbumsList();
-      SyncManager.forcePush(album).catch(() => {});
+      SyncManager.forcePush(album).catch(syncErr());
     };
   });
   setTimeout(() => document.addEventListener('click', () => dd.remove(), { once: true }), 0);
@@ -1373,7 +1409,7 @@ function renderAlbumCard(album) {
         </div>` : ''}
       </div>
       <div class="card-body">
-        <div class="card-name">${album.name || 'Album không tên'}</div>
+        <div class="card-name">${esc(album.name || 'Album không tên')}</div>
         <div class="card-meta">
           ${canEdit
             ? `<span class="status-pill s-${statusKey}" data-action="status" title="Đổi trạng thái"><span class="dot"></span>${STATUS_LABELS[statusKey] || statusKey}</span>`
@@ -1383,8 +1419,8 @@ function renderAlbumCard(album) {
           ${dateStr ? `<span class="card-date">${dateStr}</span>` : ''}
         </div>
         ${total ? `<div class="card-prog"><div class="card-prog-fill" style="width:${albumSelPct(album)}%"></div></div>` : ''}
-        ${visibleGals.length ? `<div class="card-chips">${visibleGals.map(g => `<span class="card-chip">${g.name}</span>`).join('')}${extraGals ? `<span class="card-chip card-chip-more">+${extraGals}</span>` : ''}</div>` : ''}
-        ${album.photoStaff ? `<div class="card-photo-staff">📷 ${album.photoStaff}</div>` : ''}
+        ${visibleGals.length ? `<div class="card-chips">${visibleGals.map(g => `<span class="card-chip">${esc(g.name)}</span>`).join('')}${extraGals ? `<span class="card-chip card-chip-more">+${extraGals}</span>` : ''}</div>` : ''}
+        ${album.photoStaff ? `<div class="card-photo-staff">📷 ${esc(album.photoStaff)}</div>` : ''}
       </div>
     </div>`;
 }
@@ -1409,14 +1445,14 @@ function renderAlbumListView(list) {
     const shootTxt = shoot ? fmtDate(shoot) : '—';
     return `<div class="alv-row" onclick="openAlbum('${a.id}')">
       <div class="alv-thumb">${cover ? `<img src="${cover}" loading="lazy">` : '📷'}</div>
-      <div><div class="alv-name">${a.name || 'Album không tên'}</div><div class="alv-sub">${shootTxt}</div></div>
+      <div><div class="alv-name">${esc(a.name || 'Album không tên')}</div><div class="alv-sub">${esc(shootTxt)}</div></div>
       <span>${albumStatusPill(a)}</span>
       <div class="alv-prog-wrap">
         <span class="alv-prog-text">${sel}/${a.maxCount ? a.maxCount + ' (tối đa)' : total}${total ? ` · ${pct}%` : ''}</span>
         ${total ? `<div class="alv-prog-bar"><div class="alv-prog-fill" style="width:${pct}%"></div></div>` : ''}
       </div>
       <span style="font-size:12px">${dlHtml}</span>
-      <div class="alv-staff-av" title="${staff}">${initials}</div>
+      <div class="alv-staff-av" title="${esc(staff)}">${esc(initials)}</div>
     </div>`;
   }).join('');
   return `<div class="albums-list-view">
@@ -1442,7 +1478,7 @@ function renderAlbumKanban(list) {
         : '';
       const dateStr = a.createdAt ? fmtDate(a.createdAt) : '';
       return `<div class="kanban-card" onclick="openAlbum('${a.id}')" style="border-left-color:${color}">
-        <div class="kanban-card-name">${a.name || 'Album không tên'}</div>
+        <div class="kanban-card-name">${esc(a.name || 'Album không tên')}</div>
         <div class="kc-row">
           <span class="kc-count">${sel}/${a.maxCount || total} ảnh</span>
           ${dlHtml}
@@ -1474,7 +1510,7 @@ function renderAlbumMasonry(list) {
     return `<div class="masonry-card" onclick="openAlbum('${a.id}')">
       <div class="masonry-thumb" style="${cover ? `height:auto` : 'height:120px'}">${cover ? `<img src="${cover}" style="width:100%;display:block" loading="lazy">` : '📷'}</div>
       <div class="masonry-body">
-        <div class="masonry-name">${a.name || 'Album không tên'}</div>
+        <div class="masonry-name">${esc(a.name || 'Album không tên')}</div>
         <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
           ${albumStatusPill(a)}
           <span style="font-size:11px;color:var(--muted)">${sel}/${total}</span>
@@ -1522,36 +1558,37 @@ function renderAlbumsList() {
     grid.innerHTML = renderAlbumMasonry(list);
   }
 
-  // Wire grid cards (data-id + action buttons). List/kanban/masonry use inline onclick=openAlbum.
-  grid.querySelectorAll('[data-id]').forEach(el => {
+  // Wire grid cards via event delegation on the persistent container.
+  // Property assignment (.onclick) overrides any previous handler, so listeners
+  // never accumulate across re-renders. List/kanban/masonry use inline onclick=openAlbum.
+  grid.onclick = e => {
+    const el = e.target.closest('[data-id]');
+    if (!el) return;
     const id = el.dataset.id;
-    el.addEventListener('click', e => {
-      if (e.target.closest('[data-action]')) return;
-      openAlbum(id);
-    });
-    el.querySelectorAll('[data-action]').forEach(btn => {
-      btn.onclick = e => {
-        e.stopPropagation();
-        const album = S.albums.find(a => a.id === id);
-        if (!album) return;
-        const action = btn.dataset.action;
-        if (action === 'edit') openEditModal(album);
-        else if (action === 'share') openShareModal(album);
-        else if (action === 'trash') trashAlbum(album);
-        else if (action === 'cover') { openAlbum(id); setTimeout(openCoverModal, 150); }
-        else if (action === 'status') { if (can('album', 'edit')) showStatusDropdown(btn, album); }
-        else if (action === 'menu') {
-          const dd = el.querySelector('.card-dropdown');
-          if (!dd) return;
-          document.querySelectorAll('.card-dropdown.open').forEach(d => { if (d !== dd) d.classList.remove('open'); });
-          dd.classList.toggle('open');
-          if (dd.classList.contains('open')) {
-            setTimeout(() => document.addEventListener('click', () => dd.classList.remove('open'), { once: true }), 0);
-          }
+    const btn = e.target.closest('[data-action]');
+    if (btn) {
+      e.stopPropagation();
+      const album = S.albums.find(a => a.id === id);
+      if (!album) return;
+      const action = btn.dataset.action;
+      if (action === 'edit') openEditModal(album);
+      else if (action === 'share') openShareModal(album);
+      else if (action === 'trash') trashAlbum(album);
+      else if (action === 'cover') { openAlbum(id); setTimeout(openCoverModal, 150); }
+      else if (action === 'status') { if (can('album', 'edit')) showStatusDropdown(btn, album); }
+      else if (action === 'menu') {
+        const dd = el.querySelector('.card-dropdown');
+        if (!dd) return;
+        document.querySelectorAll('.card-dropdown.open').forEach(d => { if (d !== dd) d.classList.remove('open'); });
+        dd.classList.toggle('open');
+        if (dd.classList.contains('open')) {
+          setTimeout(() => document.addEventListener('click', () => dd.classList.remove('open'), { once: true }), 0);
         }
-      };
-    });
-  });
+      }
+      return;
+    }
+    openAlbum(id);
+  };
 }
 
 /* ─────────────────────────────────────────────
@@ -1647,8 +1684,8 @@ function renderDashboard() {
     const avClr    = isOver ? '#B0492E' : '#9A6B1E';
     const initials = (a.name || 'A').trim().split(/\s+/).map(w => w[0].toUpperCase()).slice(0, 2).join('');
     return `<div class="dash-row" onclick="openAlbum('${a.id}')">
-      <span class="dash-av" style="background:${avBg};color:${avClr}">${initials}</span>
-      <span class="dash-row-name" style="flex:1">${a.name || 'Album'}<br><small style="font-size:11.5px;color:var(--muted-2);font-weight:500">${albumStatusLabel(a)}</small></span>
+      <span class="dash-av" style="background:${avBg};color:${avClr}">${esc(initials)}</span>
+      <span class="dash-row-name" style="flex:1">${esc(a.name || 'Album')}<br><small style="font-size:11.5px;color:var(--muted-2);font-weight:500">${albumStatusLabel(a)}</small></span>
       <span class="dash-dl-pill" style="color:${pillClr};background:${pillBg}">${txt}</span>
     </div>`;
   }).join('') : '<div class="dash-empty">Không có album nào sắp trễ 🎉</div>';
@@ -1662,7 +1699,7 @@ function renderDashboard() {
     const quotaLabel = a.maxCount ? `${sel}/${a.maxCount} ảnh đã chọn` : `${sel}/${total} ảnh`;
     return `<div class="dash-row" onclick="openAlbum('${a.id}')">
       <span class="dash-row-name" style="flex:1">
-        ${a.name || 'Album'}
+        ${esc(a.name || 'Album')}
         <div class="dash-prog-wrap"><div class="dash-prog-bar"><div class="dash-prog-fill" style="width:${pct}%"></div></div><span class="dash-prog-cnt">${quotaLabel}</span></div>
       </span>
       ${albumStatusPill(a)}
@@ -1708,7 +1745,7 @@ function renderSettings() {
 
   const acc = document.getElementById('settings-account');
   if (acc) acc.innerHTML =
-    `<div class="set-row"><span class="set-row-l">Tên</span><span class="set-row-v">${S.auth?.name || '—'}</span></div>
+    `<div class="set-row"><span class="set-row-l">Tên</span><span class="set-row-v">${esc(S.auth?.name || '—')}</span></div>
      <div class="set-row"><span class="set-row-l">Vai trò</span><span class="set-row-v"><span class="role-badge role-${role}">${roleLabel(role)}</span></span></div>`;
 
   const ds = document.getElementById('settings-drive-status');
@@ -1717,7 +1754,7 @@ function renderSettings() {
     ds.innerHTML =
       `<div class="set-row"><span class="set-row-l">Trạng thái</span>
         <span class="set-row-v"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;background:${connected ? 'var(--green)' : 'var(--amber)'}"></span>${connected ? 'Đã kết nối' : 'Chưa kết nối'}</span></div>`
-      + (connected && S.driveEmail ? `<div class="set-row"><span class="set-row-l">Tài khoản</span><span class="set-row-v">${S.driveEmail}</span></div>` : '');
+      + (connected && S.driveEmail ? `<div class="set-row"><span class="set-row-l">Tài khoản</span><span class="set-row-v">${esc(S.driveEmail)}</span></div>` : '');
   }
 
   // Gate actions by role
@@ -1777,7 +1814,7 @@ function renderStaffPage() {
         return `<div class="staff-album-card" onclick="openAlbum('${a.id}')">
           <div class="staff-album-thumb">${cover ? `<img src="${cover}" loading="lazy">` : '📷'}</div>
           <div class="staff-album-body">
-            <div class="staff-album-name">${a.name || 'Album không tên'}</div>
+            <div class="staff-album-name">${esc(a.name || 'Album không tên')}</div>
             <div class="staff-album-row">${albumStatusPill(a)}<span style="font-size:10px;color:var(--muted)">${sel}/${total}</span></div>
           </div>
         </div>`;
@@ -1785,8 +1822,8 @@ function renderStaffPage() {
 
       return `<div class="staff-card">
         <div class="staff-card-header" onclick="toggleStaffCard('${safeId}')">
-          <div class="staff-avatar">${initials}</div>
-          <div class="staff-info"><strong>${data.name}</strong><small>Photo — up ảnh gốc</small></div>
+          <div class="staff-avatar">${esc(initials)}</div>
+          <div class="staff-info"><strong>${esc(data.name)}</strong><small>Photo — up ảnh gốc</small></div>
           <div class="staff-stats">
             <div class="staff-stat"><span class="staff-stat-n">${albums.length}</span><span class="staff-stat-l">bộ ảnh</span></div>
             <div class="staff-stat"><span class="staff-stat-n">${totalPhotos.toLocaleString('vi')}</span><span class="staff-stat-l">ảnh up</span></div>
@@ -1855,13 +1892,13 @@ function renderProgressPage() {
   if (S.progView === 'grid') {
     list.className = 'albums-grid';
     list.innerHTML = filtered.map(renderAlbumCard).join('');
-    list.querySelectorAll('[data-id]').forEach(el => {
-      el.addEventListener('click', e => {
-        if (e.target.closest('[data-action]')) return;
-        setHash('album/' + el.dataset.id);
-        openAlbumDetail(el.dataset.id, true);
-      });
-    });
+    // Delegation on persistent container — no listener accumulation across re-renders.
+    list.onclick = e => {
+      const el = e.target.closest('[data-id]');
+      if (!el || e.target.closest('[data-action]')) return;
+      setHash('album/' + el.dataset.id);
+      openAlbumDetail(el.dataset.id, true);
+    };
   } else {
     list.className = '';
     list.innerHTML = filtered.map(a => {
@@ -1869,7 +1906,7 @@ function renderProgressPage() {
       const dl = deadlineBadge(a.deadline, a.status);
       const sel = (a.photos || []).filter(p => p.selected || p.review === 'selected').length;
       return `<div class="prog-row" data-id="${a.id}">
-        <span class="prog-client">${a.name || '—'}<small>${a.client || ''}</small></span>
+        <span class="prog-client">${esc(a.name || '—')}<small>${esc(a.client || '')}</small></span>
         <span>${shoot ? shoot.toLocaleDateString('vi-VN') : '—'}</span>
         <span>${a.deadlineDays != null ? a.deadlineDays + ' ngày' : '—'}</span>
         <span>${albumStatusPill(a)}</span>
@@ -1898,7 +1935,7 @@ function renderTrashPage() {
     <div class="album-card trash-card" data-id="${a.id}">
       <div class="card-cover" style="${albumCoverUrl(a) ? `background-image:url('${albumCoverUrl(a)}')` : ''}"></div>
       <div class="card-body">
-        <div class="card-name">${a.name || 'Album không tên'}</div>
+        <div class="card-name">${esc(a.name || 'Album không tên')}</div>
         <div class="card-meta" style="gap:6px">
           <button style="color:#5C8A3A;background:#EAF0E0;border:none;border-radius:10px;padding:6px 12px;font-size:12.5px;font-weight:700;cursor:pointer;transition:opacity .15s" data-restore="${a.id}">Khôi phục</button>
           <button style="color:#C0492E;background:#FBEAE3;border:none;border-radius:10px;padding:6px 12px;font-size:12.5px;font-weight:700;cursor:pointer;transition:opacity .15s" data-perm="${a.id}">Xoá vĩnh viễn</button>
@@ -1924,7 +1961,7 @@ function trashAlbum(album) {
   S.trashedAlbums.push(album);
   S.albums = S.albums.filter(a => a.id !== album.id);
   saveAlbumsLocal();
-  SyncManager.forcePush(album).catch(() => {});
+  SyncManager.forcePush(album).catch(syncErr());
   renderAlbumsList();
   // Update badge
   document.getElementById('trash-badge') && renderTrashBadge();
@@ -1938,7 +1975,7 @@ function restoreAlbum(id) {
   S.albums.push(album);
   S.trashedAlbums = S.trashedAlbums.filter(a => a.id !== id);
   saveAlbumsLocal();
-  SyncManager.forcePush(album).catch(() => {});
+  SyncManager.forcePush(album).catch(syncErr());
   renderTrashPage();
   renderTrashBadge();
 }
@@ -2038,7 +2075,7 @@ async function handleCreateSubmit(e) {
     renderAlbumsList();
 
     // Push to server
-    apiPushAlbum(album).catch(() => {});
+    apiPushAlbum(album).catch(syncErr());
 
     // If upload mode, start uploading
     if (_createSrc === 'upload' && _createFiles.length) {
@@ -2148,7 +2185,7 @@ function renderDetailSets(album) {
 
   const mkItem = (idx, name, count, gid, autoSel) => `
     <div class="set-item ${S.detailSetIdx === idx ? 'active' : ''}" data-set-idx="${idx}">
-      <span class="set-name">${autoSel ? '✓ ' : ''}${name}</span>
+      <span class="set-name">${autoSel ? '✓ ' : ''}${esc(name)}</span>
       <span class="set-count">${count}</span>
       <div class="set-acts">
         ${gid && !autoSel ? `<button class="set-act" data-rename="${gid}" title="Đổi tên">✏</button>
@@ -2162,37 +2199,30 @@ function renderDetailSets(album) {
       mkItem(i + 1, g.name, galCount(g), g.id, g.autoSelected)
     ).join('');
 
-  // Switch gallery
-  el.querySelectorAll('[data-set-idx]').forEach(div => {
-    div.addEventListener('click', e => {
-      if (e.target.closest('[data-rename],[data-upload],[data-deleteg]')) return;
-      S.detailSetIdx = parseInt(div.dataset.setIdx);
-      el.querySelectorAll('[data-set-idx]').forEach(d => d.classList.remove('active'));
-      div.classList.add('active');
-      const a = getDetailAlbum();
-      const g = currentDetailGallery(a);
-      document.getElementById('ad-set-title').textContent = g ? g.name : 'ẢNH GỐC';
-      renderDetailGrid();
-    });
-  });
-
-  // Rename gallery
-  el.querySelectorAll('[data-rename]').forEach(btn => {
-    btn.onclick = e => { e.stopPropagation(); renameGallery(album.id, btn.dataset.rename); };
-  });
-  // Upload to specific gallery
-  el.querySelectorAll('[data-upload]').forEach(btn => {
-    btn.onclick = e => {
+  // Delegation on persistent container — handles switch/rename/upload/delete in one
+  // handler, reassigned each render so listeners never accumulate.
+  el.onclick = e => {
+    const renameBtn = e.target.closest('[data-rename]');
+    if (renameBtn) { e.stopPropagation(); renameGallery(album.id, renameBtn.dataset.rename); return; }
+    const uploadBtn = e.target.closest('[data-upload]');
+    if (uploadBtn) {
       e.stopPropagation();
-      const gid = btn.dataset.upload;
-      const gallery = (album.galleries || []).find(g => g.id === gid);
+      const gallery = (album.galleries || []).find(g => g.id === uploadBtn.dataset.upload);
       if (gallery) triggerGalleryUpload(album, gallery);
-    };
-  });
-  // Delete gallery
-  el.querySelectorAll('[data-deleteg]').forEach(btn => {
-    btn.onclick = e => { e.stopPropagation(); deleteGallery(album.id, btn.dataset.deleteg); };
-  });
+      return;
+    }
+    const delBtn = e.target.closest('[data-deleteg]');
+    if (delBtn) { e.stopPropagation(); deleteGallery(album.id, delBtn.dataset.deleteg); return; }
+    const div = e.target.closest('[data-set-idx]');
+    if (!div) return;
+    S.detailSetIdx = parseInt(div.dataset.setIdx);
+    el.querySelectorAll('[data-set-idx]').forEach(d => d.classList.remove('active'));
+    div.classList.add('active');
+    const a = getDetailAlbum();
+    const g = currentDetailGallery(a);
+    document.getElementById('ad-set-title').textContent = g ? g.name : 'ẢNH GỐC';
+    renderDetailGrid();
+  };
 }
 
 function renameGallery(albumId, galleryId) {
@@ -2204,7 +2234,7 @@ function renameGallery(albumId, galleryId) {
   gallery.name = newName.trim();
   album.lastActivity = Date.now();
   saveAlbumsLocal();
-  apiPushAlbum(album).catch(() => {});
+  apiPushAlbum(album).catch(syncErr());
   renderDetailSets(album);
   toast('✓ Đã đổi tên');
 }
@@ -2221,7 +2251,7 @@ function deleteGallery(albumId, galleryId) {
   if (S.detailSetIdx > album.galleries.length) S.detailSetIdx = 0;
   album.lastActivity = Date.now();
   saveAlbumsLocal();
-  apiPushAlbum(album).catch(() => {});
+  apiPushAlbum(album).catch(syncErr());
   renderDetailFull(album);
   toast('✓ Đã xoá album');
 }
@@ -2255,22 +2285,22 @@ function renderDetailGrid() {
   if (S.detailView === 'list') {
     grid.className = 'detail-grid list-view';
     grid.innerHTML = photos.map((p, i) => `
-      <div class="photo-list-row ${S.detailPicked.has(p.id) ? 'picked' : ''}" data-idx="${i}" data-id="${p.id}">
-        <img src="${photoUrl(p, 's120')}" alt="${p.name}" loading="lazy">
-        <span class="photo-name">${p.name || p.id}</span>
+      <div class="photo-list-row ${S.detailPicked.has(p.id) ? 'picked' : ''}" data-idx="${i}" data-id="${esc(p.id)}">
+        <img src="${photoUrl(p, 's120')}" alt="${esc(p.name)}" loading="lazy">
+        <span class="photo-name">${esc(p.name || p.id)}</span>
         ${sel.has(p.id) ? '<span class="sel-tag">✓ Đã chọn</span>' : ''}
-        ${p.note ? `<span class="note-tag note-tag-client" title="${p.note}">💬 Khách</span>` : ''}
-        ${p.studioNote ? `<span class="note-tag note-tag-studio" title="${p.studioNote}">🔖 Studio</span>` : ''}
+        ${p.note ? `<span class="note-tag note-tag-client" title="${esc(p.note)}">💬 Khách</span>` : ''}
+        ${p.studioNote ? `<span class="note-tag note-tag-studio" title="${esc(p.studioNote)}">🔖 Studio</span>` : ''}
         ${S.detailPickMode ? `<input type="checkbox" class="pick-cb" ${S.detailPicked.has(p.id) ? 'checked' : ''}>` : ''}
       </div>`).join('');
   } else {
     grid.className = 'detail-grid grid-view';
     grid.innerHTML = photos.map((p, i) => `
-      <div class="photo-thumb ${sel.has(p.id) ? 'selected' : ''} ${S.detailPicked.has(p.id) ? 'picked' : ''}" data-idx="${i}" data-id="${p.id}">
-        <img src="${photoUrl(p, 's400')}" alt="${p.name}" loading="lazy">
-        <div class="photo-num" title="${p.name || ''}">${photoDispName(p, i)}</div>
-        ${p.note ? '<div class="note-dot note-dot-client" title="Ghi chú khách: ' + p.note.slice(0,60).replace(/"/g,'') + '">💬</div>' : ''}
-        ${p.studioNote ? '<div class="note-dot note-dot-studio" title="Ghi chú studio: ' + p.studioNote.slice(0,60).replace(/"/g,'') + '">🔖</div>' : ''}
+      <div class="photo-thumb ${sel.has(p.id) ? 'selected' : ''} ${S.detailPicked.has(p.id) ? 'picked' : ''}" data-idx="${i}" data-id="${esc(p.id)}">
+        <img src="${photoUrl(p, 's400')}" alt="${esc(p.name)}" loading="lazy">
+        <div class="photo-num" title="${esc(p.name || '')}">${esc(photoDispName(p, i))}</div>
+        ${p.note ? '<div class="note-dot note-dot-client" title="Ghi chú khách: ' + esc(p.note.slice(0,60)) + '">💬</div>' : ''}
+        ${p.studioNote ? '<div class="note-dot note-dot-studio" title="Ghi chú studio: ' + esc(p.studioNote.slice(0,60)) + '">🔖</div>' : ''}
         ${S.detailPickMode ? `<input type="checkbox" class="pick-cb" ${S.detailPicked.has(p.id) ? 'checked' : ''}>` : ''}
         ${sel.has(p.id) ? '<div class="sel-badge">✓</div>' : ''}
       </div>`).join('');
@@ -2368,7 +2398,7 @@ async function syncAlbumWithDrive() {
     album.photos.push(...newPhotos);
     album.lastActivity = Date.now();
     saveAlbumsLocal();
-    apiPushAlbum(album).catch(() => {});
+    apiPushAlbum(album).catch(syncErr());
     renderDetailGrid();
     toast(`✓ Đồng bộ xong. Thêm ${newPhotos.length} ảnh mới.`);
   } catch (e) {
@@ -2471,7 +2501,7 @@ function openCoverModal() {
 
   const photos = (album.photos || []).slice(0, 100);
   grid.innerHTML = photos.map(p =>
-    `<div class="cover-pick-thumb" data-id="${p.id}"><img src="${photoUrl(p, 's200')}" loading="lazy"></div>`
+    `<div class="cover-pick-thumb" data-id="${esc(p.id)}"><img src="${photoUrl(p, 's200')}" loading="lazy"></div>`
   ).join('');
 
   grid.querySelectorAll('[data-id]').forEach(el => {
@@ -2481,7 +2511,7 @@ function openCoverModal() {
       album.cover = el.dataset.id;
       album.lastActivity = Date.now();
       saveAlbumsLocal();
-      apiPushAlbum(album).catch(() => {});
+      apiPushAlbum(album).catch(syncErr());
       const cov = document.getElementById('ad-cover');
       const cp = (album.photos || []).find(x => x.id === el.dataset.id);
       if (cov) cov.src = photoUrl(cp, 's400');
@@ -2525,7 +2555,7 @@ function handleEditSave(e) {
   album.internalNotes = document.getElementById('ed-internal').value.trim();
   album.lastActivity = Date.now();
   saveAlbumsLocal();
-  apiPushAlbum(album).catch(() => {});
+  apiPushAlbum(album).catch(syncErr());
   closeModal('edit-modal');
   renderCurrentPage();
   if (S.page === 'albumdetail' && S.detailId === album.id) renderDetailFull(album);
@@ -2724,7 +2754,7 @@ function renderClientFolders(album) {
   });
 
   el.innerHTML = tabs.map((t, i) =>
-    `<button class="cfolder ${i === 0 ? 'active' : ''}" data-cf="${i}" data-gid="${t.id || ''}">${t.name}</button>`
+    `<button class="cfolder ${i === 0 ? 'active' : ''}" data-cf="${i}" data-gid="${t.id || ''}">${esc(t.name)}</button>`
   ).join('');
 
   // Default to first tab
@@ -2784,35 +2814,35 @@ function renderClientGrid() {
     const r = S.clientReview[p.id]?.r || '';
     const note = S.clientReview[p.id]?.n || '';
     const statusCls = r === 'selected' ? 'c-selected' : r === 'later' ? 'c-later' : r === 'skip' ? 'c-skip' : '';
-    return `<div class="photo-item ${statusCls}" data-idx="${i}" data-id="${p.id}">
+    return `<div class="photo-item ${statusCls}" data-idx="${i}" data-id="${esc(p.id)}">
       <div class="photo-img-wrap">
-        <img src="${photoUrl(p, 's600')}" alt="${p.name || ''}" loading="lazy">
+        <img src="${photoUrl(p, 's600')}" alt="${esc(p.name || '')}" loading="lazy">
         ${note ? `<div class="note-dot">📝</div>` : ''}
       </div>
       <div class="photo-actions">
-        <button class="pa-btn ${r === 'selected' ? 'active' : ''}" data-action="select" data-id="${p.id}">
+        <button class="pa-btn ${r === 'selected' ? 'active' : ''}" data-action="select" data-id="${esc(p.id)}">
           ${r === 'selected' ? '✓ Đã chọn' : 'Chọn ảnh'}
         </button>
-        <button class="pa-btn later ${r === 'later' ? 'active' : ''}" data-action="later" data-id="${p.id}">Xem lại</button>
+        <button class="pa-btn later ${r === 'later' ? 'active' : ''}" data-action="later" data-id="${esc(p.id)}">Xem lại</button>
       </div>
     </div>`;
   }).join('');
 
-  grid.querySelectorAll('[data-action]').forEach(btn => {
-    btn.onclick = e => {
+  // Delegation on persistent container — reassigned each render, no accumulation.
+  grid.onclick = e => {
+    const btn = e.target.closest('[data-action]');
+    if (btn) {
       e.stopPropagation();
       const pid = btn.dataset.id;
       const action = btn.dataset.action;
       clientSetReview(pid, action === 'select' ? (S.clientReview[pid]?.r === 'selected' ? '' : 'selected') : 'later');
-    };
-  });
-  grid.querySelectorAll('[data-idx]').forEach(el => {
-    el.addEventListener('click', e => {
-      if (e.target.closest('[data-action]')) return;
-      const globalIdx = start + parseInt(el.dataset.idx);
-      openLightboxClient(photos, globalIdx);
-    });
-  });
+      return;
+    }
+    const el = e.target.closest('[data-idx]');
+    if (!el) return;
+    const globalIdx = start + parseInt(el.dataset.idx);
+    openLightboxClient(photos, globalIdx);
+  };
 }
 
 function clientSetReview(photoId, r) {
@@ -2877,7 +2907,7 @@ async function handleFinishBtn() {
           openModal('summary-modal');
           return;
         }
-      } catch {}
+      } catch (err) { console.warn('[LMS] finish submit attempt failed:', err); }
       if (attempt < 2) await new Promise(r => setTimeout(r, 1000));
     }
     toast('⚠ Không thể gửi. Kiểm tra mạng và thử lại.');
@@ -2898,7 +2928,7 @@ async function checkDriveStatus() {
       updateDriveDot(data.connected, data.email);
       return data.connected;
     }
-  } catch {}
+  } catch (err) { console.warn('[LMS] drive status check failed:', err); }
   updateDriveDot(false, '');
   return false;
 }
@@ -3129,7 +3159,7 @@ const AutoSave = {
     const album = getDetailAlbum();
     if (!album) return;
     saveAlbumsLocal();
-    try { await apiPushAlbum(album); } catch {}
+    try { await apiPushAlbum(album); } catch (err) { console.warn('[LMS] detail push failed:', err); }
   },
 };
 
@@ -3382,7 +3412,7 @@ async function init() {
   document.getElementById('trash-empty')?.addEventListener('click', async () => {
     if (!S.trashedAlbums.length) return;
     if (!confirm('Xoá vĩnh viễn tất cả album trong thùng rác?')) return;
-    await Promise.all(S.trashedAlbums.map(a => apiDeleteAlbum(a.id, true).catch(() => {})));
+    await Promise.all(S.trashedAlbums.map(a => apiDeleteAlbum(a.id, true).catch(syncErr('permanent delete'))));
     S.trashedAlbums = [];
     saveAlbumsLocal();
     renderTrashPage();
@@ -3456,7 +3486,7 @@ async function init() {
     S.detailPicked.clear();
     S.detailPickMode = false;
     saveAlbumsLocal();
-    apiPushAlbum(album).catch(() => {});
+    apiPushAlbum(album).catch(syncErr());
     updatePickBar();
     renderDetailGrid();
     toast('✓ Đã xoá ảnh');
@@ -3473,7 +3503,7 @@ async function init() {
     album.galleries.push(newGallery);
     album.lastActivity = Date.now();
     saveAlbumsLocal();
-    apiPushAlbum(album).catch(() => {});
+    apiPushAlbum(album).catch(syncErr());
     renderDetailSets(album);
     toast(`✓ Đã tạo album "${name.trim()}"`);
   });
@@ -3640,7 +3670,7 @@ function wireClientEvents() {
     if (!p || S.lbContext !== 'detail') return;
     p.studioNote = document.getElementById('lb-studio-note-ta').value.trim();
     const album = getDetailAlbum();
-    if (album) { album.lastActivity = Date.now(); saveAlbumsLocal(); SyncManager.forcePush(album).catch(() => {}); }
+    if (album) { album.lastActivity = Date.now(); saveAlbumsLocal(); SyncManager.forcePush(album).catch(syncErr()); }
     // Update grid badge live
     const dot = document.querySelector(`.photo-thumb[data-id='${p.id}'] .note-dot-studio`);
     if (p.studioNote && !dot) renderDetailGrid();
