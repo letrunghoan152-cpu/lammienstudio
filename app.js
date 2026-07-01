@@ -2052,6 +2052,8 @@ async function handleCreateSubmit(e) {
       if (!driveText) { toast('Vui lòng nhập link Google Drive'); return; }
       photos = await buildDrivePhotos(driveText);
       if (!photos.length) { toast('⚠ Không tìm thấy ảnh — folder trống hoặc chưa chia sẻ đúng cách với tài khoản Drive của studio'); return; }
+      // Lưu folderId để tạo ZIP từ Drive folder (bypass 4.5MB limit)
+      folderId = parseDriveFolderId(driveText);
     }
 
     const album = {
@@ -2785,22 +2787,53 @@ async function downloadClientPhotos(mode = 'selected') {
     if (!selectedIds.size) { toast('⚠ Bạn chưa chọn ảnh nào.'); return; }
     photos = (album.photos || []).filter(p => selectedIds.has(p.id));
   } else {
-    // 'all' = ảnh trong gallery đang xem (theo model client hiện tại:
-    // S.clientGalleryId null = ảnh không thuộc gallery con).
     const gId = S.clientGalleryId;
     photos = (album.photos || []).filter(p => gId ? p.galleryId === gId : !p.galleryId);
   }
   if (!photos.length) { toast('⚠ Không có ảnh nào để tải.'); return; }
 
+  const total = photos.length;
+  const photoIds = photos.map(p => p.id);
+
+  // Mode 1: Album từ "Paste Drive link" → tạo ZIP từ Drive (bypass 4.5MB)
+  if (album.folderId) {
+    showDownloadModal(0, total, 'Đang tạo ZIP từ Google Drive…');
+    try {
+      const res = await fetch('/api/create-drive-zip', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ albumId: album.id, folderId: album.folderId, photoIds })
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `HTTP ${res.status}`);
+      }
+      const { downloadUrl, failed } = await res.json();
+      hideDownloadModal();
+      if (failed > 0) {
+        toast(`✅ Đã tạo ZIP (${total - failed}/${total} ảnh) — xem file txt bên trong ZIP để biết ảnh thiếu`);
+      } else {
+        toast(`✅ Đã tạo ZIP thành công — ${total} ảnh`);
+      }
+      // Redirect khách tải ZIP từ Drive (không qua Vercel, không 4.5MB limit)
+      window.location = downloadUrl;
+    } catch (e) {
+      hideDownloadModal();
+      console.error('[DL]', e.message || e);
+      toast('⚠ Tạo ZIP thất bại: ' + (e.message || e));
+    }
+    return;
+  }
+
+  // Mode 2: Album từ "Upload web" → stream qua proxy (cũ, bị 4.5MB limit)
   if (typeof JSZip === 'undefined') {
     toast('⚠ Thư viện nén ZIP chưa tải xong, thử lại sau vài giây.');
     return;
   }
 
-  const total = photos.length;
   const zip = new JSZip();
   const failed = [];
-  const usedNames = new Map(); // chống trùng tên file trong ZIP
+  const usedNames = new Map();
   const gateQ = S.clientGate ? `&gate=${encodeURIComponent(S.clientGate)}` : '';
 
   showDownloadModal(0, total, 'Đang bắt đầu tải ảnh...');
