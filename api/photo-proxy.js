@@ -54,24 +54,11 @@ module.exports = async (req, res) => {
     const driveId = photo.driveId || photo.id;
     if (!driveId) return res.status(404).json({ error: 'Ảnh thiếu driveId' });
 
-    // Dùng Drive API `files/<id>?alt=media` với access token của studio để lấy
-    // BYTES NGUYÊN BẢN. Trước đây gọi `lh3.googleusercontent.com/d/<id>=d`
-    // trả ra HTML interstitial cho file lớn -> ZIP giải nén bị hỏng.
-    let tok;
-    try { tok = await getStudioDriveAccessToken(); }
-    catch (e) { return res.status(502).json({ error: 'Studio chưa kết nối Drive: ' + (e.message || e) }); }
-
-    const dlUrl = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(driveId)}?alt=media&supportsAllDrives=true`;
-    const imgRes = await fetchWithRetry(dlUrl, { Authorization: 'Bearer ' + tok.access_token }, 3);
-    const buffer = Buffer.from(await imgRes.arrayBuffer());
-    const contentType = imgRes.headers.get('content-type') || 'image/jpeg';
-
-    const safeName = String(photo.name || photoId).replace(/[\r\n"]/g, '').slice(0, 200);
-    res.setHeader('Cache-Control', 'private, max-age=3600');
-    res.setHeader('Content-Type', contentType);
-    res.setHeader('Content-Length', buffer.length);
-    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(safeName)}"`);
-    res.send(buffer);
+    // Redirect trực tiếp tới lh3 CDN (bypass Vercel 4.5MB limit).
+    // lh3 =d trả bytes nguyên bản; khách tải từ CDN Google (cached, nhanh),
+    // không qua serverless nên không bị 4.5MB giới hạn.
+    const lh3Url = `https://lh3.googleusercontent.com/d/${driveId}=d`;
+    return res.redirect(302, lh3Url);
   } catch (err) {
     console.error('[PROXY]', albumId, photoId, err.message || err);
     res.status(502).json({ error: 'Không thể tải ảnh: ' + (err.message || err) });
