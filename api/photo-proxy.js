@@ -1,19 +1,22 @@
 // /api/photo-proxy?albumId=...&photoId=...[&gate=...]
 // Stream từng ảnh nguyên bản về client để JSZip nén phía trình duyệt — tránh
 // timeout 10s khi gom cả album thành 1 ZIP trên server.
-const { supa, configured, gateValid } = require('./_supa');
+const { supa, configured, gateValid, getStudioDriveAccessToken } = require('./_supa');
 
 // Hint cho Vercel; trên gói Hobby vẫn bị giới hạn 10s, nhưng giữ để khi nâng plan
 // hoặc chạy môi trường khác sẽ tự kéo dài.
 module.exports.config = { maxDuration: 25 };
 
-async function fetchWithRetry(url, attempts = 3) {
+async function fetchWithRetry(url, headers, attempts = 3) {
   let lastErr;
   for (let i = 0; i < attempts; i++) {
     try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(20000) });
+      const res = await fetch(url, { headers, signal: AbortSignal.timeout(20000) });
       if (res.ok) return res;
-      if (res.status >= 400 && res.status < 500) throw new Error('HTTP ' + res.status);
+      // 401/403 -> có thể token hết hạn, chỉ retry 1 lần; 4xx khác không retry
+      if (res.status >= 400 && res.status < 500 && res.status !== 401) {
+        throw new Error('HTTP ' + res.status);
+      }
       lastErr = new Error('HTTP ' + res.status);
     } catch (e) {
       lastErr = e;
@@ -51,9 +54,15 @@ module.exports = async (req, res) => {
     const driveId = photo.driveId || photo.id;
     if (!driveId) return res.status(404).json({ error: 'Ảnh thiếu driveId' });
 
-    // lh3 `=d` trả nguyên bản, không qua resize CDN.
-    const dlUrl = `https://lh3.googleusercontent.com/d/${driveId}=d`;
-    const imgRes = await fetchWithRetry(dlUrl, 3);
+    // Dùng Drive API `files/<id>?alt=media` với access token của studio để lấy
+    // BYTES NGUYÊN BẢN. Trước đây gọi `lh3.googleusercontent.com/d/<id>=d`
+    // trả ra HTML interstitial cho file lớn -> ZIP giải nén bị hỏng.
+    let tok;
+    try { tok = await getStudioDriveAccessToken(); }
+    catch (e) { return res.status(502).json({ error: 'Studio chưa kết nối Drive: ' + (e.message || e) }); }
+
+    const dlUrl = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(driveId)}?alt=media&supportsAllDrives=true`;
+    const imgRes = await fetchWithRetry(dlUrl, { Authorization: 'Bearer ' + tok.access_token }, 3);
     const buffer = Buffer.from(await imgRes.arrayBuffer());
     const contentType = imgRes.headers.get('content-type') || 'image/jpeg';
 

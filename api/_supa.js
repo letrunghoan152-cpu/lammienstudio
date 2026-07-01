@@ -191,6 +191,27 @@ async function checkAuthFull(req) {
   return validUser(req.headers['x-user'], req.headers['x-pass']);
 }
 
+/* ---- Access token Drive của studio (refresh + cache in-memory) ----
+   Trả { access_token, email, expires_in } hoặc ném lỗi.
+   Dùng chung cho /api/drive-token (nhân sự) và /api/photo-proxy (khách tải ảnh). */
+let _studioDriveCache = { token: '', exp: 0 };
+async function getStudioDriveAccessToken() {
+  const cfg = await getConfig('studio_drive');
+  if (!cfg || !cfg.refresh_token) throw new Error('Studio chưa kết nối Google Drive');
+  if (_studioDriveCache.token && Date.now() < _studioDriveCache.exp - 60000) {
+    return { access_token: _studioDriveCache.token, email: cfg.email || '', expires_in: Math.floor((_studioDriveCache.exp - Date.now()) / 1000) };
+  }
+  const cid = (process.env.GOOGLE_CLIENT_ID || '').trim();
+  const secret = (process.env.GOOGLE_CLIENT_SECRET || '').trim();
+  if (!cid || !secret) throw new Error('Chưa cấu hình GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET');
+  const body = new URLSearchParams({ client_id: cid, client_secret: secret, refresh_token: cfg.refresh_token, grant_type: 'refresh_token' });
+  const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
+  const tok = await r.json();
+  if (!r.ok || !tok.access_token) throw new Error(tok.error_description || tok.error || 'Không refresh được token');
+  _studioDriveCache = { token: tok.access_token, exp: Date.now() + (tok.expires_in || 3600) * 1000 };
+  return { access_token: tok.access_token, email: cfg.email || '', expires_in: tok.expires_in || 3600 };
+}
+
 /* ---- Gửi email thông báo cho nhân sự (qua Resend) ---- */
 async function sendStudioEmail(subject, html) {
   const key = process.env.RESEND_API_KEY;
@@ -244,4 +265,4 @@ function can(role, resource, action) {
   return !!(PERMISSIONS[r]?.[resource]?.[action]);
 }
 
-module.exports = { supa, configured, checkAuth, checkAuthFull, validUser, sendStudioEmail, getConfig, setConfig, resolveToken, PERMISSIONS, can, casUpdateAlbum, gateToken, gateValid };
+module.exports = { supa, configured, checkAuth, checkAuthFull, validUser, sendStudioEmail, getConfig, setConfig, resolveToken, PERMISSIONS, can, casUpdateAlbum, gateToken, gateValid, getStudioDriveAccessToken };
