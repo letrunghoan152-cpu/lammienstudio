@@ -2722,12 +2722,154 @@ function runPhoneGate(albumId) {
   });
 }
 
+/* ─────────────────────────────────────────────
+   Tải ảnh phía client — Tier 2 (JSZip + photo-proxy)
+   Mỗi ảnh = 1 request nhỏ qua /api/photo-proxy nên không bị 10s timeout
+   của Vercel Hobby; trình duyệt tự nén ZIP.
+   ───────────────────────────────────────────── */
+
+async function fetchWithRetryClient(url, attempts = 3) {
+  let lastErr;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(25000) });
+      if (res.ok) return res;
+      lastErr = new Error('HTTP ' + res.status);
+      // 4xx -> không retry (album bị khoá, không cho tải, không tìm thấy…)
+      if (res.status >= 400 && res.status < 500) break;
+    } catch (e) { lastErr = e; }
+    if (i < attempts - 1) await new Promise(r => setTimeout(r, 800 * Math.pow(2, i)));
+  }
+  throw lastErr;
+}
+
+function showDownloadModal(done, total, label) {
+  const m = document.getElementById('download-modal');
+  if (!m) return;
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+  const lbl = m.querySelector('#dl-label');
+  const bar = m.querySelector('#dl-bar-fill');
+  const pctEl = m.querySelector('#dl-pct');
+  if (lbl) lbl.textContent = label;
+  if (bar) bar.style.width = pct + '%';
+  if (pctEl) pctEl.textContent = pct + '%';
+  m.hidden = false;
+}
+
+function hideDownloadModal() {
+  const el = document.getElementById('download-modal');
+  if (el) el.hidden = true;
+}
+
+function updateDownloadVisibility() {
+  const el = document.getElementById('dl-all');
+  if (!el) return;
+  el.hidden = !S.clientAlbum || S.clientAlbum.allowDownload === false;
+}
+
+async function downloadClientPhotos(mode = 'selected') {
+  const album = S.clientAlbum;
+  if (!album) return;
+  if (album.allowDownload === false) {
+    toast('⚠ Album này không cho phép tải về ảnh.');
+    return;
+  }
+
+  let photos = [];
+  if (mode === 'selected') {
+    const selectedIds = new Set(
+      Object.entries(S.clientReview || {})
+        .filter(([, v]) => v && v.r === 'selected')
+        .map(([id]) => id)
+    );
+    if (!selectedIds.size) { toast('⚠ Bạn chưa chọn ảnh nào.'); return; }
+    photos = (album.photos || []).filter(p => selectedIds.has(p.id));
+  } else {
+    // 'all' = ảnh trong gallery đang xem (theo model client hiện tại:
+    // S.clientGalleryId null = ảnh không thuộc gallery con).
+    const gId = S.clientGalleryId;
+    photos = (album.photos || []).filter(p => gId ? p.galleryId === gId : !p.galleryId);
+  }
+  if (!photos.length) { toast('⚠ Không có ảnh nào để tải.'); return; }
+
+  if (typeof JSZip === 'undefined') {
+    toast('⚠ Thư viện nén ZIP chưa tải xong, thử lại sau vài giây.');
+    return;
+  }
+
+  const total = photos.length;
+  const zip = new JSZip();
+  const failed = [];
+  const usedNames = new Map(); // chống trùng tên file trong ZIP
+  const gateQ = S.clientGate ? `&gate=${encodeURIComponent(S.clientGate)}` : '';
+
+  showDownloadModal(0, total, 'Đang bắt đầu tải ảnh...');
+
+  for (let i = 0; i < photos.length; i++) {
+    const p = photos[i];
+    showDownloadModal(i, total, `Đang tải ảnh ${i + 1}/${total}...`);
+    try {
+      const res = await fetchWithRetryClient(
+        `/api/photo-proxy?albumId=${encodeURIComponent(album.id)}&photoId=${encodeURIComponent(p.id)}${gateQ}`,
+        3
+      );
+      const blob = await res.blob();
+      let name = p.name || `photo_${i + 1}.jpg`;
+      const seen = usedNames.get(name) || 0;
+      if (seen > 0) {
+        const dot = name.lastIndexOf('.');
+        name = dot > 0 ? `${name.slice(0, dot)}_${seen}${name.slice(dot)}` : `${name}_${seen}`;
+      }
+      usedNames.set(p.name || name, seen + 1);
+      zip.file(name, blob);
+    } catch (e) {
+      console.warn('[DL] Lỗi ảnh:', p.name || p.id, e.message || e);
+      failed.push(p.name || p.id);
+    }
+  }
+
+  if (failed.length) {
+    const report = [
+      'BÁO CÁO LỖI TẢI ẢNH',
+      `Album: ${album.name || album.id}`,
+      `Ngày: ${new Date().toLocaleString('vi-VN')}`,
+      '',
+      `Không tải được ${failed.length} ảnh:`,
+      ...failed.map(n => '  - ' + n),
+      '',
+      'Vui lòng liên hệ studio để được hỗ trợ.',
+    ].join('\n');
+    zip.file('_THIEU_ANH_doc_truoc.txt', report);
+  }
+
+  showDownloadModal(total, total, 'Đang nén file ZIP...');
+  const content = await zip.generateAsync(
+    { type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 1 } },
+    meta => showDownloadModal(total, total, `Đang nén... ${Math.round(meta.percent)}%`)
+  );
+
+  const url = URL.createObjectURL(content);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = (album.name || 'photos') + '.zip';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+
+  hideDownloadModal();
+  toast(failed.length
+    ? `✅ Đã tải ${photos.length - failed.length}/${total} ảnh (${failed.length} ảnh lỗi — xem file txt trong ZIP)`
+    : `✅ Đã tải về ${total} ảnh thành công!`);
+}
+
 function showClientView(album) {
   document.getElementById('app')?.setAttribute('hidden', '');
   const clientEl = document.getElementById('client');
   clientEl?.removeAttribute('hidden');
   document.getElementById('client-loading')?.classList.add('hidden');
   document.getElementById('client-error')?.classList.add('hidden');
+  updateDownloadVisibility();
 
   // Cover
   const cover = albumCoverUrl(album);
@@ -3599,6 +3741,11 @@ function wireClientEvents() {
     S.clientPage++;
     renderClientGrid();
     window.scrollTo(0, 0);
+  });
+
+  // Download button (khách): tải các ảnh đã chọn thành ZIP qua photo-proxy.
+  document.getElementById('dl-all')?.addEventListener('click', () => {
+    downloadClientPhotos('selected');
   });
 
   // Sort toggle

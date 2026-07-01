@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <script>try{if(localStorage.getItem('lamMienThemeV')!=='2'){localStorage.removeItem('lamMienTheme');localStorage.setItem('lamMienThemeV','2');}document.documentElement.setAttribute('data-theme',localStorage.getItem('lamMienTheme')||'light');}catch(e){document.documentElement.setAttribute('data-theme','light');}</script>
-  <link rel="stylesheet" href="styles.css?v=20260629a">
+  <link rel="stylesheet" href="styles.css?v=20260629c">
   <link rel="icon" href="logo.svg">
 </head>
 <body>
@@ -138,11 +138,18 @@
         <div class="dash-stats" id="dash-stats"></div>
         <div class="dash-cols">
           <div class="dash-col">
-            <div class="dash-section-title">⏱ Cần chú ý — deadline</div>
+            <div class="dash-sec-head">
+              <span class="dash-sec-dot" style="background:#C0492E"></span>
+              <span class="dash-sec-lbl">Cần chú ý — Deadline</span>
+              <span class="dash-sec-bdg" id="dash-deadline-badge" hidden></span>
+            </div>
             <div id="dash-deadline"></div>
           </div>
           <div class="dash-col">
-            <div class="dash-section-title">🕑 Hoạt động gần đây</div>
+            <div class="dash-sec-head">
+              <span class="dash-sec-dot" style="background:var(--muted-2)"></span>
+              <span class="dash-sec-lbl">Hoạt động gần đây</span>
+            </div>
             <div id="dash-recent"></div>
           </div>
         </div>
@@ -295,6 +302,23 @@
             <button class="btn primary" id="settings-sheet-export">Xuất ra Google Sheet</button>
           </div>
 
+          <!-- Lọc theo ngày -->
+          <div class="settings-group">
+            <h3>Lọc album theo ngày tạo</h3>
+            <p class="sub">Chỉ hiện album được tạo trong khoảng thời gian này (áp dụng cả Tổng quan).</p>
+            <div class="date-range-wrap">
+              <div class="date-range-row">
+                <label class="date-range-lbl">Từ ngày</label>
+                <input type="date" id="settings-date-from" class="date-range-input">
+              </div>
+              <div class="date-range-row">
+                <label class="date-range-lbl">Đến ngày</label>
+                <input type="date" id="settings-date-to" class="date-range-input">
+              </div>
+              <button class="btn ghost sm" id="settings-date-clear" style="margin-top:4px">Xoá bộ lọc</button>
+            </div>
+          </div>
+
           <!-- Nhân sự -->
           <div class="settings-group">
             <h3>Quản lý nhân sự &amp; phân quyền</h3>
@@ -309,38 +333,37 @@
         <div class="page-head">
           <div><h1>Phân quyền nhân sự</h1><p class="sub">3 cấp độ — thay đổi trong bảng nhân sự của studio.</p></div>
         </div>
-        <div class="perms-grid">
-          <div class="perm-card perm-owner">
-            <div class="perm-role">👑 Chủ studio <code>owner</code></div>
-            <ul>
-              <li>Tạo, sửa, xoá vĩnh viễn album</li>
-              <li>Kết nối Google Drive studio</li>
-              <li>Xuất dữ liệu ra Google Sheet</li>
-              <li>Xem và dọn sạch Thùng rác</li>
-              <li>Truy cập Cài đặt hệ thống</li>
-            </ul>
+        <div class="perm-table">
+          <div class="perm-table-head">
+            <span>Thành viên</span>
+            <span>Email</span>
+            <span>Vai trò</span>
+            <span>Trạng thái</span>
+            <span></span>
           </div>
-          <div class="perm-card perm-editor">
-            <div class="perm-role">🎨 Nhân sự chính <code>editor</code></div>
-            <ul>
-              <li>Tạo, sửa album — không xoá vĩnh viễn</li>
-              <li>Tạo, xoá gallery con</li>
-              <li>Upload ảnh lên Drive</li>
-              <li>Xuất dữ liệu ra Sheet</li>
-              <li>Xem Thùng rác (không dọn sạch)</li>
-            </ul>
+          <div class="perm-row" id="perm-row-owner">
+            <div class="perm-member">
+              <span class="dash-av" style="background:#E1EAD5;color:#43622C">A</span>
+              <div><strong>Admin</strong><small>Chủ studio (owner)</small></div>
+            </div>
+            <span class="perm-email">admin@lammienstudio.com</span>
+            <span class="perm-role-badge admin">Admin</span>
+            <span class="status-pill s-done"><span class="dot"></span>Hoạt động</span>
+            <button class="btn ghost sm">Sửa</button>
           </div>
-          <div class="perm-card perm-viewer">
-            <div class="perm-role">👁 Nhân sự phụ <code>viewer</code></div>
-            <ul>
-              <li>Xem tất cả album</li>
-              <li>Upload ảnh lên Drive</li>
-              <li>Không tạo/sửa/xoá album</li>
-              <li>Không truy cập Thùng rác</li>
-            </ul>
+          <div class="perm-row" id="perm-row-me">
+            <div class="perm-member">
+              <span class="dash-av" style="background:#E7F0F4;color:#3F6E8C" id="perm-av-me">M</span>
+              <div><strong id="perm-name-me">Mai Hiên</strong><small id="perm-role-me">Nhân sự chính (editor)</small></div>
+            </div>
+            <span class="perm-email" id="perm-email-me">—</span>
+            <span class="perm-role-badge staff" id="perm-badge-me">Staff</span>
+            <span class="status-pill s-done"><span class="dot"></span>Hoạt động</span>
+            <button class="btn ghost sm">Sửa</button>
           </div>
         </div>
-        <div class="hint" style="margin-top:16px">
+        <button class="perm-invite-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Mời thành viên mới</button>
+        <div class="hint">
           Để thay đổi role: cập nhật cột vai trò trong bảng nhân sự của studio → <code>owner</code> / <code>editor</code> / <code>viewer</code> → nhân sự đăng xuất và đăng nhập lại.
         </div>
       </section>
@@ -348,13 +371,17 @@
       <!-- ===== CHI TIẾT ALBUM ===== -->
       <section class="page" id="page-albumdetail">
         <div class="detail-top">
-          <button class="icon-btn" id="ad-back" title="Quay lại"><svg viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></button>
-          <div class="detail-title"><strong id="ad-name"></strong><small id="ad-meta"></small></div>
-          <span class="status-pill" id="ad-status"><span class="dot"></span></span>
-          <span class="grow"></span>
-          <button class="btn ghost sm" id="ad-sync" title="Lấy ảnh mới nhất từ Drive (thêm ảnh mới, bỏ ảnh đã xoá)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 1-9 9 9 9 0 0 1-7.5-4M3 12a9 9 0 0 1 9-9 9 9 0 0 1 7.5 4"/><path d="M21 3v5h-5M3 21v-5h5"/></svg>Đồng bộ Drive</button>
-          <button class="btn ghost sm" id="ad-preview"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>Xem trang khách</button>
-          <button class="btn primary sm" id="ad-share"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></svg>Chia sẻ link</button>
+          <div class="detail-top-row1">
+            <button class="icon-btn" id="ad-back" title="Quay lại"><svg viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></button>
+            <strong id="ad-name"></strong>
+            <span class="status-pill" id="ad-status"><span class="dot"></span></span>
+            <small id="ad-meta"></small>
+          </div>
+          <div class="detail-top-row2">
+            <button class="btn ghost sm" id="ad-sync" title="Lấy ảnh mới nhất từ Drive (thêm ảnh mới, bỏ ảnh đã xoá)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 1-9 9 9 9 0 0 1-7.5-4M3 12a9 9 0 0 1 9-9 9 9 0 0 1 7.5 4"/><path d="M21 3v5h-5M3 21v-5h5"/></svg>Đồng bộ Drive</button>
+            <button class="btn ghost sm" id="ad-preview"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>Xem trang khách</button>
+            <button class="btn primary sm" id="ad-share"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></svg>Chia sẻ link</button>
+          </div>
         </div>
         <div class="detail-body">
           <aside class="detail-side">
@@ -369,6 +396,7 @@
             <input type="file" id="ad-file-input" accept="image/*" multiple hidden>
             <div class="detail-grid-head">
               <h2 id="ad-set-title">ẢNH GỐC</h2>
+              <span class="ad-sel-pill" id="ad-sel-count" hidden></span>
               <span class="grow"></span>
               <button class="btn ghost sm" id="ad-add-photos" title="Thêm ảnh từ máy (hoặc kéo-thả ảnh vào vùng này)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Thêm ảnh</button>
               <button class="btn ghost sm" id="ad-pick" title="Chọn ảnh để xoá">Chọn</button>
@@ -523,6 +551,11 @@
             <input id="album-name" placeholder="VD: 8.6 Kiều Anh 12H">
             <span class="hint">Ngày chụp tự nhận từ tên: <strong>“8.6 … 12H”</strong> = chụp 8/6 lúc 12h.</span>
           </div>
+          <div class="field">
+            <label for="album-client">Tên khách <span class="opt">(tuỳ chọn)</span></label>
+            <input id="album-client" placeholder="VD: Kiều Anh">
+            <span class="hint">Dùng trong email template và báo cáo. Bỏ trống để tự nhận từ tên album.</span>
+          </div>
           <div class="row2">
             <div class="field">
               <label for="deadline-days">Số ngày trả ảnh</label>
@@ -632,9 +665,15 @@
         <p class="sub" style="margin:0;color:var(--muted)">Gửi link này cho khách để họ vào chọn ảnh. Khách không cần đăng nhập.</p>
         <div class="field"><label>Link chọn ảnh</label><input id="share-link" readonly></div>
         <div id="share-warn" class="hint" style="color:#fb7185" hidden>⚠ Album “Tải từ máy” chỉ xem được trên máy này — dùng nguồn Google Drive để có link chia sẻ cho khách.</div>
+        <div id="share-qr" class="share-qr-wrap"></div>
+        <div class="field">
+          <label>Mẫu email gửi khách <span class="opt">(có thể sửa)</span></label>
+          <textarea id="share-email-tmpl" rows="8" style="font-size:12.5px;line-height:1.65;font-family:inherit;resize:vertical"></textarea>
+        </div>
       </div>
       <div class="modal-foot">
         <button class="btn ghost" type="button" id="share-open">Mở thử</button>
+        <button class="btn ghost" type="button" id="share-copy-email">Sao chép email</button>
         <button class="btn primary" type="button" id="share-copy">Sao chép link</button>
       </div>
     </div>
@@ -655,10 +694,14 @@
         </div>
         <img id="lb-img" src="" alt="">
         <div class="lb-note-box" id="lb-note-box" hidden>
-          <span class="lb-note-ico">📝</span>
+          <span class="lb-note-ico">💬</span>
           <span class="lb-note-text" id="lb-note-text"></span>
           <button class="lb-note-mini" id="lb-note-edit" title="Sửa ghi chú"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button>
           <button class="lb-note-mini" id="lb-note-del" title="Xoá ghi chú"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+        </div>
+        <div class="lb-studio-note-box" id="lb-studio-note-box" hidden>
+          <span class="lb-note-ico">🔖</span>
+          <textarea class="lb-studio-ta" id="lb-studio-note-ta" rows="2" placeholder="Ghi chú nội bộ studio (chỉ nhân sự thấy)…"></textarea>
         </div>
         <div class="lb-acts" id="lb-acts">
           <button class="lb-mini" id="lb-dl" title="Tải ảnh"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg></button>
@@ -743,8 +786,22 @@
 
   <div class="toast" id="toast"></div>
   <div class="upload-stack" id="upload-stack"></div>
+
+  <!-- Overlay tiến trình tải ZIP phía khách (Tier 2 client-side JSZip) -->
+  <div id="download-modal" class="dl-backdrop" hidden>
+    <div class="dl-modal">
+      <h3 class="dl-modal-title">Đang chuẩn bị file tải về</h3>
+      <p id="dl-label">Đang xử lý ảnh...</p>
+      <div class="dl-progress-wrap">
+        <div class="dl-progress-bar"><div id="dl-bar-fill"></div></div>
+        <span id="dl-pct">0%</span>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <script src="app.js?v=20260617g"></script>
+  <script src="app.js?v=20260701a"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </body>
 </html>
